@@ -1,0 +1,10 @@
+ReMaP / Ville:
+
+  - name: zone-from-gwr
+    label: Zone from GWR
+    description: Creates a zone.shp file from a list of GWR coordinates
+    interfaces: [cli, dashboard]
+    module: remap_ville_plugin.zone_from_gwr
+    parameters: ["general:scenario", zone-from-gwr]
+    input-files:
+      - []

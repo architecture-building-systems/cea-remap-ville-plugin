@@ -1,14 +1,8 @@
 """
-Creates a simple summary of the demand totals from the cea demand script.
-
-NOTE: This is an example of how to structure a cea plugin script. It is intentionally simplistic to avoid distraction.
+Creates a zone.shp file given a list of GWR building ids.
 """
-from __future__ import division
-from __future__ import print_function
-
 import cea.config
 import cea.inputlocator
-import cea.plugin
 
 __author__ = "Daren Thomas"
 __copyright__ = "Copyright 2020, Architecture and Building Systems - ETH Zurich"
@@ -18,14 +12,6 @@ __version__ = "0.1"
 __maintainer__ = "Daren Thomas"
 __email__ = "cea@arch.ethz.ch"
 __status__ = "Production"
-
-
-class DemandSummaryPlugin(cea.plugin.CeaPlugin):
-    """
-    Define the plugin class - unless you want to customize the behavior, you only really need to declare the class. The
-    rest of the information will be picked up from ``default.config``, ``schemas.yml`` and ``scripts.yml`` by default.
-    """
-    pass
 
 
 def summarize(total_demand_df, fudge_factor):
