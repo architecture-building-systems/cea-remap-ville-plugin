@@ -1,0 +1,8 @@
+include remap_ville_plugin/scripts.yml
+include remap_ville_plugin/schemas.yml
+include remap_ville_plugin/plugin.config
+
+include remap_ville_plugin/mapping_CONSTRUCTION_STANDARD.xlsx
+include remap_ville_plugin/mapping_USE_TYPE.xlsx
+
+recursive-include remap_ville_plugin/CH_ReMaP *.csv *.xlsx *.txt *.csv *.xls
