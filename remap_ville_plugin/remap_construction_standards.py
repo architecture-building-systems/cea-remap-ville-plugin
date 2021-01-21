@@ -29,6 +29,7 @@ def main(config):
     construction = config.remap_ville_scenarios.construction
 
     locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+
     mapping = read_mapping()
     typology = cea.utilities.dbf.dbf_to_dataframe(locator.get_building_typology())
 
