@@ -1,10 +1,11 @@
 ReMaP / Ville:
 
-  - name: zone-from-gwr
-    label: Zone from GWR
-    description: Creates a zone.shp file from a list of GWR coordinates
+  - name: remap-construction-standards
+    label: Map construction standards
+    description: Maps the construction standard used by each building to the projected scenarios
     interfaces: [cli, dashboard]
-    module: remap_ville_plugin.zone_from_gwr
-    parameters: ["general:scenario", zone-from-gwr]
+    module: remap_ville_plugin.remap_construction_standards
+    parameters: ["general:scenario", "remap-ville-scenarios:district-archetype", "remap-ville-scenarios:construction",
+                 "remap-ville-scenarios:year"]
     input-files:
-      - []
+      - [get_building_typology]
