@@ -4,6 +4,7 @@ scenario.
 """
 import os
 import shutil
+
 import cea.config
 import cea.inputlocator
 
@@ -36,8 +37,8 @@ def main(config):
 
     print(f"Copying construction standard")
     copy_file(os.path.join(database_root, "archetypes", folder_name, "CONSTRUCTION_STANDARD.xlsx"),
-                    locator.get_database_construction_standards())
-    
+              locator.get_database_construction_standards())
+
     print(f"Copying use types")
     copy_use_types(database_root, folder_name, locator)
 
@@ -46,30 +47,31 @@ def copy_use_types(database_root, folder_name, locator):
     use_types_folder = os.path.join(database_root, "archetypes", folder_name, "use_types")
     for fname in os.listdir(use_types_folder):
         copy_file(os.path.join(use_types_folder, fname),
-                        os.path.join(locator.get_database_use_types_folder(), fname))
+                  os.path.join(locator.get_database_use_types_folder(), fname))
 
 
 def copy_components_folder(database_root, locator):
     copy_file(os.path.join(database_root, "components", "CONVERSION.xls"),
-                    locator.get_database_conversion_systems())
+              locator.get_database_conversion_systems())
     copy_file(os.path.join(database_root, "components", "DISTRIBUTION.xls"),
-                    locator.get_database_distribution_systems())
+              locator.get_database_distribution_systems())
     copy_file(os.path.join(database_root, "components", "FEEDSTOCKS.xls"),
-                    locator.get_database_feedstocks())
+              locator.get_database_feedstocks())
 
 
 def copy_assemblies_folder(database_root, locator):
     copy_file(os.path.join(database_root, "assemblies", "ENVELOPE.xls"),
-                    locator.get_database_envelope_systems())
+              locator.get_database_envelope_systems())
     copy_file(os.path.join(database_root, "assemblies", "HVAC.xls"),
-                    locator.get_database_air_conditioning_systems())
+              locator.get_database_air_conditioning_systems())
     copy_file(os.path.join(database_root, "assemblies", "SUPPLY.xls"),
-                    locator.get_database_supply_assemblies())
+              locator.get_database_supply_assemblies())
 
 
 def copy_file(src, dst):
     print(f" - {dst}")
     shutil.copyfile(src, dst)
+
 
 if __name__ == "__main__":
     main(cea.config.Configuration())
