@@ -21,15 +21,15 @@ ReMaP / Ville:
   input-files:
   - [get_zone_geometry]
 
-  - name: remap-construction-standards
-    label: Map construction standards
-    description: Maps the construction standard used by each building to the projected scenarios
-    interfaces: [cli]
-    module: remap_ville_plugin.remap_construction_standards
-    parameters: ["general:scenario", "remap-ville-scenarios:district-archetype", "remap-ville-scenarios:construction",
-                 "remap-ville-scenarios:year"]
-    input-files:
-    - [get_building_typology]
+- name: remap-construction-standards
+  label: Map construction standards
+  description: Maps the construction standard used by each building to the projected scenarios
+  interfaces: [cli]
+  module: remap_ville_plugin.remap_construction_standards
+  parameters: ["general:scenario", "remap-ville-scenarios:district-archetype", "remap-ville-scenarios:construction",
+               "remap-ville-scenarios:year"]
+  input-files:
+  - [get_building_typology]
 
 - name: remap-use-types
   label: Map Building Use Types
