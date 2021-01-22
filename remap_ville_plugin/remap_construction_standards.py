@@ -8,7 +8,9 @@ Map the field ``typology.df:STANDARD`` to the new value, based on
 This can be done on a new scenario, _before_ running archetypes-mapper.
 """
 import os
+
 import pandas as pd
+
 import cea.config
 import cea.inputlocator
 import cea.utilities.dbf
