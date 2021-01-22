@@ -1,15 +1,15 @@
 ReMaP / Ville:
 
 - name: remap-copy-archetypes
-    label: Copy ReMaP Archetypes
-    description: Copies the archetypes for the scenario based on the parameters
-    interfaces: [cli, dashboard]
-    module: remap_ville_plugin.copy_archetypes
-    parameters: ["general:scenario", "remap-ville-scenarios:district-archetype",
-                 "remap-ville-scenarios:urban-development-scenario",
-                 "remap-ville-scenarios:year"]
-    input-files:
-      - [get_zone_geometry]
+  label: Copy ReMaP Archetypes
+  description: Copies the archetypes for the scenario based on the parameters
+  interfaces: [cli, dashboard]
+  module: remap_ville_plugin.copy_archetypes
+  parameters: ["general:scenario", "remap-ville-scenarios:district-archetype",
+               "remap-ville-scenarios:urban-development-scenario",
+               "remap-ville-scenarios:year"]
+  input-files:
+  - [get_zone_geometry]
 
   - name: remap-construction-standards
     label: Map construction standards
@@ -19,5 +19,15 @@ ReMaP / Ville:
     parameters: ["general:scenario", "remap-ville-scenarios:district-archetype", "remap-ville-scenarios:construction",
                  "remap-ville-scenarios:year"]
     input-files:
-      - [get_building_typology]
+    - [get_building_typology]
 
+- name: remap-use-types
+  label: Map Building Use Types
+  description: Maps the building use types (occupation) used by each building to the projected scenarios
+  interfaces: [cli, dashboard]
+  module: remap_ville_plugin.remap_use_types
+  parameters: ["general:scenario", "remap-ville-scenarios:district-archetype",
+               "remap-ville-scenarios:urban-development-scenario",
+               "remap-ville-scenarios:year"]
+  input-files:
+  - [get_building_typology]

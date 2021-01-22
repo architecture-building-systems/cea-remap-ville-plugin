@@ -1,9 +1,9 @@
 """
 Map the field ``typology.df:STANDARD`` to the new value, based on
 
-- urban-development-scenario
-- year
-- district-archetype
+- construction (BAU / NEP)
+- year (2040 / 2060)
+- district-archetype (URB, SURB, RRL)
 
 This can be done on a new scenario, _before_ running archetypes-mapper.
 """
