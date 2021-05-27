@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# @ignore-nasty
+*_updated.*
+.idea
+
 # C extensions
 *.so
 
