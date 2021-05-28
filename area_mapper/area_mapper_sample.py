@@ -1,3 +1,14 @@
+
+__author__ = "Anastasiya Popova"
+__copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
+__credits__ = ["Daren Thomas"]
+__license__ = "MIT"
+__version__ = "0.1"
+__maintainer__ = "Anastasiya Popova"
+__email__ = "cea@arch.ethz.ch"
+__status__ = "Production"
+
+
 import area_mapper as amap
 import pandas as pd
 
@@ -120,7 +131,7 @@ def main():
 
     # calculate future required area per use type
     additional_population = 7900 - 5725  # people
-    future_occupant_density = 100  # m2/occupants
+    future_occupant_density = 50  # m2/occupants
     future_required_additional_res_gfa = additional_population * future_occupant_density / 0.82
     future_required_res_gfa = future_required_additional_res_gfa + gfa_per_use_type["RESIDENTIAL"]
     future_required_gfa_series = pd.Series(
