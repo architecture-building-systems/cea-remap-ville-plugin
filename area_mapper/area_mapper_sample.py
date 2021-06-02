@@ -112,6 +112,8 @@ def calculate_per_use_gfa(typology_merged: pd.DataFrame):
 
 
 def main():
+
+    # cleans the output files in sample_data folder
     clean = True
     if clean:
         import os
