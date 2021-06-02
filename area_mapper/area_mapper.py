@@ -252,7 +252,7 @@ def update_typology_file(
             update_num_floors[position_to_column[i]] = (sub_building_total_additional_floors
                                                         + (current_ratio * current_floors))
             for building_use in update_num_floors:
-                r = update_num_floors[building_use] / total_floors
+                r = update_num_floors[building_use] / total_floors # FIXME: here differenciate the newly added MFH archetypes, let's call it MULTI_RES_2040
                 simulated_typology.loc[building, building_use] = r
                 if np.isclose(r, 0.0):
                     simulated_typology.loc[building, column_to_use[building_use]] = "NONE"
@@ -266,7 +266,7 @@ def update_typology_file(
         for column, column_type in columns_to_keep:
             keep.append(column)
             output[column] = output[column].astype(column_type)
-        output["1ST_USE"].replace({"RESIDENTIAL": "MULTI_RES"}, inplace=True)
+        output["1ST_USE"].replace({"RESIDENTIAL": "MULTI_RES"}, inplace=True) # FIXME: redundant
         output["2ND_USE"].replace({"RESIDENTIAL": "MULTI_RES"}, inplace=True)
         output["3RD_USE"].replace({"RESIDENTIAL": "MULTI_RES"}, inplace=True)
         dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))

@@ -1,4 +1,3 @@
-
 __author__ = "Anastasiya Popova"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
 __credits__ = ["Daren Thomas"]
@@ -7,7 +6,6 @@ __version__ = "0.1"
 __maintainer__ = "Anastasiya Popova"
 __email__ = "cea@arch.ethz.ch"
 __status__ = "Production"
-
 
 import area_mapper as amap
 import pandas as pd
@@ -20,23 +18,31 @@ from geopandas import GeoDataFrame
 from cea.utilities.dbf import dbf_to_dataframe
 from cea.demand.building_properties import calc_useful_areas
 
+PARAMS = {
+    'additional_population': 2175,  # people, 7900 - 5725 # TODO: add population model to store the data
+    'future_occupant_density': 50,  # m2/occupants
+    'ratio_living_space_to_GFA': 0.82,
+    'floor_height': 3, # m
+    'building_height_limit': 24, # m
+}
+
 
 def data_dir() -> Path:
     p = Path().absolute() / "sample_data"
     if not p.exists():
-        raise IOError("data_dir not found [%s]" %p)
+        raise IOError("data_dir not found [%s]" % p)
     return p
 
 
-def sample_architecture_data(path: Path=data_dir()) -> pd.DataFrame:
+def sample_architecture_data(path: Path = data_dir()) -> pd.DataFrame:
     path_to_architecture = path / "architecture.dbf"
     if not path_to_architecture.exists():
-        raise IOError("architecture file not found [%s]" %path_to_architecture)
+        raise IOError("architecture file not found [%s]" % path_to_architecture)
     architecture = dbf_to_dataframe(path_to_architecture).set_index('Name')
 
     path_to_zone_shp = path / "zone.shp"
     if not path_to_zone_shp.exists():
-        raise IOError("shape file not found [%s]" %path_to_zone_shp)
+        raise IOError("shape file not found [%s]" % path_to_zone_shp)
     prop_geometry = GeoDataFrame.from_file(str(path_to_zone_shp.absolute()))
 
     prop_geometry['footprint'] = prop_geometry.area
@@ -49,18 +55,23 @@ def sample_architecture_data(path: Path=data_dir()) -> pd.DataFrame:
     return prop_geometry
 
 
-def sample_typology_data(path: Path=data_dir()) -> pd.DataFrame:
+def sample_typology_data(path: Path = data_dir()) -> pd.DataFrame:
     path_to_typology = path / "typology.dbf"
     typology = dbf_to_dataframe(path_to_typology).set_index('Name', drop=False)
     return typology
 
 
 def sample_data() -> pd.DataFrame:
+    """
+    merges topology.dbf and architecture.dbf, and initiates empty columns
+    :return:
+    """
     typology_merged = sample_typology_data().merge(sample_architecture_data(), left_index=True, right_on='Name')
 
     # columns updated
     typology_merged.floors_ag = typology_merged.floors_ag.astype(int)
-    typology_merged["1ST_USE"].replace({"MULTI_RES": "RESIDENTIAL", "SINGLE_RES": "RESIDENTIAL"}, inplace=True)
+    typology_merged["1ST_USE"].replace({"MULTI_RES": "RESIDENTIAL", "SINGLE_RES": "RESIDENTIAL"},
+                                       inplace=True)  # FIXME: this is irrelevant
     typology_merged["2ND_USE"].replace({"MULTI_RES": "RESIDENTIAL", "SINGLE_RES": "RESIDENTIAL"}, inplace=True)
     typology_merged["3RD_USE"].replace({"MULTI_RES": "RESIDENTIAL", "SINGLE_RES": "RESIDENTIAL"}, inplace=True)
 
@@ -112,7 +123,6 @@ def calculate_per_use_gfa(typology_merged: pd.DataFrame):
 
 
 def main():
-
     # cleans the output files in sample_data folder
     clean = True
     if clean:
@@ -120,7 +130,7 @@ def main():
         data_files = os.listdir(data_dir())
         for file in data_files:
             if file.find("_update") >= 0:
-                print("cleaning: [%s]" %(data_dir() / file))
+                print("cleaning: [%s]" % (data_dir() / file))
                 Path(data_dir() / file).unlink()
 
     typology_merged = sample_data()
@@ -129,13 +139,12 @@ def main():
                                for leaf in tree])
     assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone])
     gfa_per_use_type, gfa_ratio_per_use_type = calculate_per_use_gfa(typology_merged)
-    relative_gfa_ratio_to_res = gfa_ratio_per_use_type / gfa_ratio_per_use_type.RESIDENTIAL
+    relative_gfa_ratio_to_res = gfa_ratio_per_use_type / gfa_ratio_per_use_type.RESIDENTIAL # TODO: is it where to replace with ratios from other districts?
 
     # calculate future required area per use type
-    additional_population = 7900 - 5725  # people
-    future_occupant_density = 50  # m2/occupants
-    future_required_additional_res_gfa = additional_population * future_occupant_density / 0.82
-    future_required_res_gfa = future_required_additional_res_gfa + gfa_per_use_type["RESIDENTIAL"]
+    future_required_additional_res_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
+    future_required_additional_res_gfa = future_required_additional_res_living_space / PARAMS['ratio_living_space_to_GFA']
+    future_required_res_gfa = future_required_additional_res_gfa + gfa_per_use_type["RESIDENTIAL"] # FIXME: sum of MULTI_RES and SINGLE_RES
     future_required_gfa_series = pd.Series(
         {
             use_type: future_required_res_gfa * relative_gfa_ratio_to_res[use_type]
@@ -155,9 +164,8 @@ def main():
     additional_required_gfa = future_required_gfa_series - gfa_per_use_type
     target_per_use_gfa = additional_required_gfa.astype(int).to_dict()
 
-    # upper bound = maximum_allowed_building_height / room_height
-    room_height = 3
-    city_zones = {1: (0, 24 // room_height)}
+    # upper bound = maximum_allowed_building_height / floor_height
+    city_zones = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])}
     max_allowed_floors = defaultdict(int)
 
     # calculate maximum allowed number of additional floors for each building
@@ -168,7 +176,7 @@ def main():
 
     # input parameters
     min_additional_floors = 0
-    max_additional_floors = 10
+    max_additional_floors = 10 # FIXME: is it redundant? isn't is specified in line 174?
     scenarios = amap.randomize_scenarios(
         typology_merged=typology_merged,
         mapping=sample_mapping(),
@@ -194,7 +202,7 @@ def main():
         sub_building_use = {"%s.%i" % (b[0], i): b[1]
                             for i, b in enumerate(sub_buildings)}
 
-        print("scenario [%i], target [%.4f]" %(scenario, target))
+        print("scenario [%i], target [%.4f]" % (scenario, target))
 
         footprint_area = scenario_typology_merged.footprint.to_dict()
         sub_footprint_area = {sb: footprint_area[sb.split(".")[0]]
@@ -204,7 +212,7 @@ def main():
         for sb in sub_building_idx:
             building, num = sb.split('.')
             building_to_sub_building[building].append(sb)
-        print("len of problem [%i]" %len(sub_building_idx))
+        print("len of problem [%i]" % len(sub_building_idx))
 
         solution = amap.optimize(
             target,
@@ -223,7 +231,7 @@ def main():
             "sub_footprint_area": sub_footprint_area,
             "building_to_sub_building": building_to_sub_building
         }
-        print("is-success [%i]" %solution.sol_status)
+        print("is-success [%i]" % solution.sol_status)
 
         detailed_metrics = amap.detailed_result_metrics(
             solution=solution,
@@ -233,15 +241,15 @@ def main():
             target=target
         )
         metrics[scenario] = detailed_metrics
-        print("absolute error [%.4f]" %detailed_metrics["absolute_error"])
-        print("relative error [%.4f]" %detailed_metrics["relative_error"])
+        print("absolute error [%.4f]" % detailed_metrics["absolute_error"])
+        print("relative error [%.4f]" % detailed_metrics["relative_error"])
 
     best_scenario, scenario_errors = amap.find_optimum_scenario(
         optimizations=optimizations,
         target=target
     )
     print("best scenario: [%i] with absolute error [%.4f]"
-          %(best_scenario, scenario_errors[best_scenario]))
+          % (best_scenario, scenario_errors[best_scenario]))
 
     amap.update_zone_shp_file(
         solution=optimizations[best_scenario]["solution"],
