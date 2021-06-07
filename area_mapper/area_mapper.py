@@ -124,7 +124,10 @@ def detailed_result_metrics(
     for use in actual_use:
         print("use [%s] actual [%.2f] vs. target [%.2f]" % (use, actual_use[use], per_use_gfa[use]))
         abs_error = abs(per_use_gfa[use] - actual_use[use])
-        rel_error = abs_error / per_use_gfa[use]
+        try:
+            rel_error = abs_error / per_use_gfa[use]
+        except ZeroDivisionError as e:
+            rel_error = 0.0
         print("abs. error [%.4f]" % abs_error)
         print("rel. error [%.8f]" % rel_error)
         metrics[use] = {"actual_use": actual_use[use], "per_use_gfa": per_use_gfa[use]}
@@ -256,7 +259,8 @@ def update_typology_file(
                 simulated_typology.loc[building, building_use] = r
                 if np.isclose(r, 0.0):
                     simulated_typology.loc[building, column_to_use[building_use]] = "NONE"
-        assert (total_floors - sum(update_num_floors.values())) == 0
+        if not np.isclose(total_floors, sum(update_num_floors.values())):
+            raise ValueError("total number of floors mis-match excpeted number of floors")
 
     if path_to_output_typology_file.exists():
         raise IOError("output typology.dbf file [%s] already exists" %path_to_output_typology_file)
@@ -266,7 +270,4 @@ def update_typology_file(
         for column, column_type in columns_to_keep:
             keep.append(column)
             output[column] = output[column].astype(column_type)
-        output["1ST_USE"].replace({"RESIDENTIAL": "MULTI_RES"}, inplace=True) # FIXME: redundant
-        output["2ND_USE"].replace({"RESIDENTIAL": "MULTI_RES"}, inplace=True)
-        output["3RD_USE"].replace({"RESIDENTIAL": "MULTI_RES"}, inplace=True)
         dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
