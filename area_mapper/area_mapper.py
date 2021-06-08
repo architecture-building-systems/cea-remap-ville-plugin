@@ -17,6 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from cea.utilities.dbf import dataframe_to_dbf
+from area_mapper_sample import PARAMS
 
 import pulp
 import pandas as pd
@@ -241,8 +242,7 @@ def update_typology_file(
     simulated_typology["3RD_USE_R"] = simulated_typology["3RD_USE_R"].astype(float)
     simulated_typology["REFERENCE"] = "after-optimization"
 
-    use_ratio_col_dict = {i: column for i, column in enumerate(["1ST_USE_R", "2ND_USE_R", "3RD_USE_R"])}
-    column_to_use = {"1ST_USE_R": "1ST_USE", "2ND_USE_R": "2ND_USE", "3RD_USE_R": "3RD_USE"}
+    use_col_dict = {i: column for i, column in enumerate(["1ST_USE", "2ND_USE", "3RD_USE"])}
     result = parse_milp_solution(solution)
     for building, sub_buildings in building_to_sub_building.items():
         updated_floors = dict()
@@ -250,20 +250,21 @@ def update_typology_file(
         total_additional_floors = sum([result[y] for y in sub_buildings])
         total_floors = current_floors + total_additional_floors
         for i, sub_building in enumerate(sub_buildings):
-            sub_building_total_additional_floors = result[sub_building]
-            current_ratio = status_quo_typology.loc[building, use_ratio_col_dict[i]]
-            updated_floors[use_ratio_col_dict[i]] = (sub_building_total_additional_floors
-                                                        + (current_ratio * current_floors))
-            for building_use in updated_floors:
-                r = updated_floors[building_use] / total_floors # FIXME: here differenciate the newly added MFH archetypes, let's call it MULTI_RES_2040
-                simulated_typology.loc[building, building_use] = r
+            sub_building_additional_floors = result[sub_building]
+            current_ratio = status_quo_typology.loc[building, use_col_dict[i]+'_R']
+            updated_floors[use_col_dict[i]] = (sub_building_additional_floors + (current_ratio * current_floors))
+            for use_col in updated_floors:
+                r = updated_floors[use_col] / total_floors
+                simulated_typology.loc[building, use_col+'_R'] = r
                 if np.isclose(r, 0.0):
-                    simulated_typology.loc[building, column_to_use[building_use]] = "NONE"
+                    simulated_typology.loc[building, use_col] = "NONE"
+                if simulated_typology.loc[building, use_col] == 'MULTI_RES':
+                    if sub_building_additional_floors > 0 or status_quo_typology.loc[building, use_col] == 'SINGLE_RES':
+                        simulated_typology.loc[building, use_col] = PARAMS['MULTI_RES_USE_TYPE'] # FIXME: TAKE FROM INPUT
         if not np.isclose(total_floors, sum(updated_floors.values())):
             raise ValueError("total number of floors mis-match excpeted number of floors")
-
     if path_to_output_typology_file.exists():
-        raise IOError("output typology.dbf file [%s] already exists" %path_to_output_typology_file)
+        raise IOError("output typology_updated.dbf file [%s] already exists" %path_to_output_typology_file)
     else:
         output = simulated_typology.copy()
         keep = list()
