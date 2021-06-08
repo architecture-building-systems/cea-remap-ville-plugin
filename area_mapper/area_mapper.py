@@ -241,25 +241,25 @@ def update_typology_file(
     simulated_typology["3RD_USE_R"] = simulated_typology["3RD_USE_R"].astype(float)
     simulated_typology["REFERENCE"] = "after-optimization"
 
-    position_to_column = {i: column for i, column in enumerate(["1ST_USE_R", "2ND_USE_R", "3RD_USE_R"])}
+    use_ratio_col_dict = {i: column for i, column in enumerate(["1ST_USE_R", "2ND_USE_R", "3RD_USE_R"])}
     column_to_use = {"1ST_USE_R": "1ST_USE", "2ND_USE_R": "2ND_USE", "3RD_USE_R": "3RD_USE"}
     result = parse_milp_solution(solution)
     for building, sub_buildings in building_to_sub_building.items():
-        update_num_floors = dict()
+        updated_floors = dict()
         current_floors = status_quo_typology.loc[building, "floors_ag"]
         total_additional_floors = sum([result[y] for y in sub_buildings])
         total_floors = current_floors + total_additional_floors
         for i, sub_building in enumerate(sub_buildings):
             sub_building_total_additional_floors = result[sub_building]
-            current_ratio = status_quo_typology.loc[building, position_to_column[i]]
-            update_num_floors[position_to_column[i]] = (sub_building_total_additional_floors
+            current_ratio = status_quo_typology.loc[building, use_ratio_col_dict[i]]
+            updated_floors[use_ratio_col_dict[i]] = (sub_building_total_additional_floors
                                                         + (current_ratio * current_floors))
-            for building_use in update_num_floors:
-                r = update_num_floors[building_use] / total_floors # FIXME: here differenciate the newly added MFH archetypes, let's call it MULTI_RES_2040
+            for building_use in updated_floors:
+                r = updated_floors[building_use] / total_floors # FIXME: here differenciate the newly added MFH archetypes, let's call it MULTI_RES_2040
                 simulated_typology.loc[building, building_use] = r
                 if np.isclose(r, 0.0):
                     simulated_typology.loc[building, column_to_use[building_use]] = "NONE"
-        if not np.isclose(total_floors, sum(update_num_floors.values())):
+        if not np.isclose(total_floors, sum(updated_floors.values())):
             raise ValueError("total number of floors mis-match excpeted number of floors")
 
     if path_to_output_typology_file.exists():
