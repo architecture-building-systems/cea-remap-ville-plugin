@@ -11,6 +11,7 @@ __status__ = "Production"
 import pandas as pd
 import numpy as np
 import operator
+import random
 
 from typing import Dict, Set, List
 from collections import defaultdict
@@ -31,7 +32,9 @@ PARAMS = {
     'building_height_limit': 24,  # m
     'min_additional_floors': 0,
     'max_additional_floors': 10,
-    'exclude_buildings_built_before': 1920
+    'preserve_buildings_built_before': 1920,
+    'SINGLE_to_MULTI_RES_ratio': 0.05,
+    'MULTI_RES_USE_TYPE': 'MULTI_RES_2040'
 }
 
 
@@ -154,7 +157,7 @@ def main():
     all_known_use_types = set([leaf
                                for tree in typology_merged[sample_use_columns()].values
                                for leaf in tree])
-    # check if all use types are known
+    # check if all use types are known #FIXME: is it true?
     assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone])
     gfa_per_use_type, gfa_ratio_per_use_type = calculate_per_use_gfa(typology_merged)
 
@@ -180,6 +183,7 @@ def main():
 
     future_required_gfa_series = pd.Series(future_required_gfa_dict)
     future_required_gfa_series = future_required_gfa_series.astype(int)
+    future_required_gfa_series.to_csv(os.path.join(Path().absolute(), "sample_data/future_required_gfa_series")) # FIXME: to be removed
     total_future_required_gfa = future_required_gfa_series.sum()
 
     # calculate future use ratio based on GFA
@@ -201,18 +205,25 @@ def main():
         range_additional_floors[name] = [0, max(0, max_floors - building.floors_ag)]
     building_zones = {building: range_additional_floors[building] for building in typology_merged.index}
 
-    # transform part of the SFH building to MFH
+    # keep old buildings unchanged
     buildings_filtered_out_by_age = filter_buildings_by_year_sample_data(
         typology_merged,
-        year=PARAMS["exclude_buildings_built_before"] + 1,
+        year=PARAMS["preserve_buildings_built_before"] + 1,
         less_than=True
     ).copy()
     buildings_kept = filter_buildings_by_year_sample_data(
             typology_merged,
-            year=PARAMS["exclude_buildings_built_before"],
+            year=PARAMS["preserve_buildings_built_before"],
             less_than=False
     ).copy()
-    buildings_kept.replace({"SINGLE_RES": "MULTI_RES"}, inplace=True)
+
+    # transform parts of SINGLE_RES to MULTI_RES
+    buildings_SINGLE_RES = list(buildings_kept.loc[buildings_kept['1ST_USE']=='SINGLE_RES'].index)
+    num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES)*PARAMS['SINGLE_to_MULTI_RES_ratio'])
+    buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
+    for building in buildings_to_MULTI_RES:
+        buildings_kept.loc[building,:] = buildings_kept.loc[building].replace({"SINGLE_RES": "MULTI_RES"})
+    # FIXME: add the area of replaced SFH to equivalent target_per_use_gfa["MULTI_RES"]
 
     # create random scenarios
     scenarios = amap.randomize_scenarios(
