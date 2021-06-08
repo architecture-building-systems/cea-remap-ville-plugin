@@ -25,7 +25,7 @@ from cea.demand.building_properties import calc_useful_areas
 
 PARAMS = {
     'additional_population': 2175,  # people, 7900 - 5725 # TODO: add population model to store the data
-    'future_occupant_density': 50,  # m2/occupants
+    'future_occupant_density': 50,  # living space m2/occupants
     'ratio_living_space_to_GFA': 0.82,
     'floor_height': 3,  # m
     'building_height_limit': 24,  # m
@@ -100,6 +100,10 @@ def sample_use_columns() -> List[str]:
 
 
 def sample_mapping() -> Dict[int, Set[str]]:
+    """
+    possible building uses per city zone
+    :return:
+    """
     return {
         1: {"SINGLE_RES", "MULTI_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL",
             "GYM", "SCHOOL", "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL"},
@@ -107,7 +111,11 @@ def sample_mapping() -> Dict[int, Set[str]]:
 
 
 def calculate_per_use_gfa(typology_merged: pd.DataFrame):
-    """calculate status quo GFA per use type based on the 1st use, 2nd use and 3rd use [m2]"""
+    """
+    calculates GFA per use type based on the 1st use, 2nd use and 3rd use [m2]
+    :param typology_merged:
+    :return:
+    """
     typology_merged["GFA_1ST_USE"] = typology_merged["1ST_USE_R"] * typology_merged["GFA_m2"]
     typology_merged["GFA_2ND_USE"] = typology_merged["2ND_USE_R"] * typology_merged["GFA_m2"]
     typology_merged["GFA_3RD_USE"] = typology_merged["3RD_USE_R"] * typology_merged["GFA_m2"]
@@ -146,9 +154,11 @@ def main():
     all_known_use_types = set([leaf
                                for tree in typology_merged[sample_use_columns()].values
                                for leaf in tree])
-
+    # check if all use types are known
     assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone])
     gfa_per_use_type, gfa_ratio_per_use_type = calculate_per_use_gfa(typology_merged)
+
+    # set target gfa ratios
     relative_gfa_ratio_to_res = (gfa_ratio_per_use_type
                                  / (gfa_ratio_per_use_type.SINGLE_RES + gfa_ratio_per_use_type.MULTI_RES))
 
@@ -164,7 +174,7 @@ def main():
         if use_type == "SINGLE_RES":
             future_required_gfa_dict[use_type] = gfa_per_use_type[use_type]
         elif use_type == "MULTI_RES":
-            future_required_gfa_dict[use_type] = future_required_res_gfa
+            future_required_gfa_dict[use_type] = future_required_additional_res_gfa + gfa_per_use_type[use_type]
         else:
             future_required_gfa_dict.update({use_type: future_required_res_gfa * relative_gfa_ratio_to_res[use_type]})
 
@@ -184,14 +194,14 @@ def main():
     # upper bound = maximum_allowed_building_height / floor_height
     city_zones = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])}
 
-    # calculate maximum allowed number of additional floors for each building
-    max_allowed_floors = dict()
+    # calculate possible range of additional floors for each building
+    range_additional_floors = dict()
     for name, building in typology_merged.iterrows():
         min_floors, max_floors = city_zones[building.city_zone]
-        max_allowed_floors[name] = [0, max(0, max_floors - building.floors_ag)]
-    building_zones = {building: max_allowed_floors[building] for building in typology_merged.index}
+        range_additional_floors[name] = [0, max(0, max_floors - building.floors_ag)]
+    building_zones = {building: range_additional_floors[building] for building in typology_merged.index}
 
-    # filer(s) and creating random scenarios
+    # transform part of the SFH building to MFH
     buildings_filtered_out_by_age = filter_buildings_by_year_sample_data(
         typology_merged,
         year=PARAMS["exclude_buildings_built_before"] + 1,
@@ -203,6 +213,8 @@ def main():
             less_than=False
     ).copy()
     buildings_kept.replace({"SINGLE_RES": "MULTI_RES"}, inplace=True)
+
+    # create random scenarios
     scenarios = amap.randomize_scenarios(
         typology_merged=buildings_kept,
         mapping=sample_mapping(),
@@ -210,6 +222,7 @@ def main():
         scenario_count=10,
     )
 
+    # built area allocation for all scenarios
     optimizations = dict()
     metrics = dict()
     target = additional_required_gfa.sum()
@@ -271,6 +284,7 @@ def main():
         print("absolute error [%.4f]" % detailed_metrics["absolute_error"])
         print("relative error [%.4f]" % detailed_metrics["relative_error"])
 
+    # find the best scenario
     best_scenario, scenario_errors = amap.find_optimum_scenario(
         optimizations=optimizations,
         target=target
@@ -278,9 +292,9 @@ def main():
     print("best scenario: [%i] with absolute error [%.4f]"
           % (best_scenario, scenario_errors[best_scenario]))
 
-    # add back those buildings initially filtered out
+    # write typology.dbf and zone.shp with the best scenario
     typology_df = scenarios[best_scenario].copy()
-    typology_df = typology_df.append(buildings_filtered_out_by_age, sort=True)
+    typology_df = typology_df.append(buildings_filtered_out_by_age, sort=True) # add back those buildings initially filtered out
     amap.update_zone_shp_file(
         solution=optimizations[best_scenario]["solution"],
         typology_merged=typology_df,
