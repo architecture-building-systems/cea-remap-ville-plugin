@@ -157,25 +157,24 @@ def main():
     all_known_use_types = set([leaf
                                for tree in typology_merged[sample_use_columns()].values
                                for leaf in tree])
-    # check if all use types are known #FIXME: is it true?
+    # check if all use types are known # FIXME: is it true?
     assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone])
     gfa_per_use_type, gfa_ratio_per_use_type = calculate_per_use_gfa(typology_merged)
 
-    # set target gfa ratios
+    # set target gfa ratios # FIXME: get from files
     relative_gfa_ratio_to_res = (gfa_ratio_per_use_type
-                                 / (gfa_ratio_per_use_type.SINGLE_RES + gfa_ratio_per_use_type.MULTI_RES))
+                                 / (gfa_ratio_per_use_type.SINGLE_RES + gfa_ratio_per_use_type.MULTI_RES)) # 2020
 
     # calculate future required area per use type
     future_required_additional_res_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
     future_required_additional_res_gfa = future_required_additional_res_living_space / PARAMS['ratio_living_space_to_GFA']
-    future_required_res_gfa = (future_required_additional_res_gfa
-                               + gfa_per_use_type.SINGLE_RES
-                               + gfa_per_use_type.MULTI_RES)
+    future_required_res_gfa = (future_required_additional_res_gfa +
+                               gfa_ratio_per_use_type.SINGLE_RES + gfa_ratio_per_use_type.MULTI_RES)
 
     future_required_gfa_dict = dict()
     for use_type in relative_gfa_ratio_to_res.index:
         if use_type == "SINGLE_RES":
-            future_required_gfa_dict[use_type] = gfa_per_use_type[use_type]
+            future_required_gfa_dict[use_type] = gfa_per_use_type[use_type] # TODO: conflict in coming lines
         elif use_type == "MULTI_RES":
             future_required_gfa_dict[use_type] = future_required_additional_res_gfa + gfa_per_use_type[use_type]
         else:
@@ -217,7 +216,7 @@ def main():
             less_than=False
     ).copy()
 
-    # transform parts of SINGLE_RES to MULTI_RES
+    # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
     buildings_SINGLE_RES = list(buildings_kept.loc[buildings_kept['1ST_USE']=='SINGLE_RES'].index)
     num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES)*PARAMS['SINGLE_to_MULTI_RES_ratio'])
     buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
