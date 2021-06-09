@@ -82,6 +82,16 @@ def filter_buildings_by_year_sample_data(typology_merged: pd.DataFrame, year: in
     return typology_merged[op(typology_merged.YEAR, year)]
 
 
+def filter_buildings_by_use_sample_data(typology_merged: pd.DataFrame, use_to_be_filtered: str):
+    typology_copy = typology_merged.copy()
+    building_names = typology_merged.index
+    # drop MULTI_RES_2040 buildings
+    typology_merged = typology_merged.drop(typology_merged[typology_merged["1ST_USE"] == use_to_be_filtered].index)
+    building_names_remained = typology_merged.index
+    dropped_buildings_by_use = typology_copy.loc[list(set(building_names)-set(building_names_remained))]
+    return typology_merged, dropped_buildings_by_use
+
+
 def sample_data() -> pd.DataFrame:
     """
     merges topology.dbf and architecture.dbf, and initiates empty columns
@@ -169,7 +179,7 @@ def main():
     future_required_additional_res_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
     future_required_additional_res_gfa = future_required_additional_res_living_space / PARAMS['ratio_living_space_to_GFA']
     future_required_res_gfa = (future_required_additional_res_gfa +
-                               gfa_ratio_per_use_type.SINGLE_RES + gfa_ratio_per_use_type.MULTI_RES)
+                               gfa_per_use_type.SINGLE_RES + gfa_per_use_type.MULTI_RES)
 
     future_required_gfa_dict = dict()
     for use_type in relative_gfa_ratio_to_res.index:
@@ -204,18 +214,25 @@ def main():
         range_additional_floors[name] = [0, max(0, max_floors - building.floors_ag)]
     building_zones = {building: range_additional_floors[building] for building in typology_merged.index}
 
+    # filter out buildings by use
+    buildings_filtered_out_by_use, dropped_buildings_by_use = filter_buildings_by_use_sample_data(
+        typology_merged,
+        use_to_be_filtered=PARAMS["MULTI_RES_USE_TYPE"],
+    ).copy()
+
     # keep old buildings unchanged
     buildings_filtered_out_by_age = filter_buildings_by_year_sample_data(
-        typology_merged,
+        buildings_filtered_out_by_use,
         year=PARAMS["preserve_buildings_built_before"] + 1,
         less_than=True
     ).copy()
-    # FIXME: filter out existing MULTI_RES_2040
+
     buildings_kept = filter_buildings_by_year_sample_data(
-            typology_merged,
-            year=PARAMS["preserve_buildings_built_before"],
-            less_than=False
+        buildings_filtered_out_by_use,
+        year=PARAMS["preserve_buildings_built_before"],
+        less_than=False
     ).copy()
+
 
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
     buildings_SINGLE_RES = list(buildings_kept.loc[buildings_kept['1ST_USE']=='SINGLE_RES'].index)
@@ -305,7 +322,9 @@ def main():
 
     # write typology.dbf and zone.shp with the best scenario
     typology_df = scenarios[best_scenario].copy()
-    typology_df = typology_df.append(buildings_filtered_out_by_age, sort=True) # add back those buildings initially filtered out
+    # add back those buildings initially filtered out
+    typology_df = typology_df.append(buildings_filtered_out_by_age, sort=True)
+    typology_df = typology_df.append(dropped_buildings_by_use, sort=True)
     amap.update_zone_shp_file(
         solution=optimizations[best_scenario]["solution"],
         typology_merged=typology_df,

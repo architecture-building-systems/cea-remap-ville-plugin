@@ -135,3 +135,5 @@ dmypy.json
 
 # intellij configs
 .idea/
+.idea/misc.xml
+.idea/cea-plugin-template.iml
