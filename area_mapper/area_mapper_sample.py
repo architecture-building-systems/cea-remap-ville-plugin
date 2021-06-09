@@ -210,6 +210,7 @@ def main():
         year=PARAMS["preserve_buildings_built_before"] + 1,
         less_than=True
     ).copy()
+    # FIXME: filter out existing MULTI_RES_2040
     buildings_kept = filter_buildings_by_year_sample_data(
             typology_merged,
             year=PARAMS["preserve_buildings_built_before"],
