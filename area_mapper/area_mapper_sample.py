@@ -191,7 +191,7 @@ def main():
         raise ValueError("sum of use-ratios does not equal 1.0, instead [%f]" %future_required_gfa_ratio.sum())
 
     # calculate additional required GFA as (future required area - existing area)
-    additional_required_gfa = future_required_gfa_series - gfa_per_use_type
+    additional_required_gfa = future_required_gfa_series - gfa_per_use_type # FIXME: remove MULTI_RES_2040 from additional required area
     target_per_use_gfa = additional_required_gfa.astype(int).to_dict()
 
     # upper bound = maximum_allowed_building_height / floor_height
