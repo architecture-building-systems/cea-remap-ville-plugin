@@ -33,7 +33,7 @@ PARAMS = {
     'min_additional_floors': 0,
     'max_additional_floors': 10,
     'preserve_buildings_built_before': 1920,
-    'SINGLE_to_MULTI_RES_ratio': 0.05,
+    'SINGLE_to_MULTI_RES_ratio': 0.0,
     'MULTI_RES_USE_TYPE': 'MULTI_RES_2040'
 }
 
@@ -170,6 +170,10 @@ def main():
     # check if all use types are known # FIXME: is it true?
     assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone])
     gfa_per_use_type, gfa_ratio_per_use_type = calculate_per_use_gfa(typology_merged)
+    # FIXME: below is a work-around to remove MULTI_RES_2040
+    gfa_future_MULTI_RES = gfa_per_use_type["MULTI_RES_2040"]
+    gfa_per_use_type.drop("MULTI_RES_2040", inplace=True)
+    gfa_ratio_per_use_type.drop("MULTI_RES_2040", inplace=True)
 
     # set target gfa ratios # FIXME: get from files
     relative_gfa_ratio_to_res = (gfa_ratio_per_use_type
@@ -188,6 +192,7 @@ def main():
         elif use_type == "MULTI_RES":
             future_required_gfa_dict[use_type] = future_required_additional_res_gfa + gfa_per_use_type[use_type]
         else:
+            # if use_type != 'MULTI_RES_2040': # avoid adding future buildings to target #FIXME: to be removed
             future_required_gfa_dict.update({use_type: future_required_res_gfa * relative_gfa_ratio_to_res[use_type]})
 
     future_required_gfa_series = pd.Series(future_required_gfa_dict)
@@ -201,7 +206,9 @@ def main():
         raise ValueError("sum of use-ratios does not equal 1.0, instead [%f]" %future_required_gfa_ratio.sum())
 
     # calculate additional required GFA as (future required area - existing area)
-    additional_required_gfa = future_required_gfa_series - gfa_per_use_type # FIXME: remove MULTI_RES_2040 from additional required area
+    additional_required_gfa = future_required_gfa_series - gfa_per_use_type
+    # remove MULTI_RES_2040 from additional required area
+    additional_required_gfa["MULTI_RES"] = additional_required_gfa["MULTI_RES"] - gfa_future_MULTI_RES #
     target_per_use_gfa = additional_required_gfa.astype(int).to_dict()
 
     # upper bound = maximum_allowed_building_height / floor_height
@@ -218,7 +225,7 @@ def main():
     buildings_filtered_out_by_use, dropped_buildings_by_use = filter_buildings_by_use_sample_data(
         typology_merged,
         use_to_be_filtered=PARAMS["MULTI_RES_USE_TYPE"],
-    ).copy()
+    )
 
     # keep old buildings unchanged
     buildings_filtered_out_by_age = filter_buildings_by_year_sample_data(
