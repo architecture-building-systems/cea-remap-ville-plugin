@@ -1,4 +1,3 @@
-
 __author__ = "Anastasiya Popova"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
 __credits__ = ["Daren Thomas"]
@@ -7,7 +6,6 @@ __version__ = "0.1"
 __maintainer__ = "Anastasiya Popova"
 __email__ = "cea@arch.ethz.ch"
 __status__ = "Production"
-
 
 from typing import List, Dict, Set, Tuple, Union, NoReturn
 from numpy.random import Generator, PCG64
@@ -24,12 +22,12 @@ import numpy as np
 
 
 def randomize(
-    data_frame: pd.DataFrame,
-    generator: Generator,
-    mapping: Dict[int, Set],
-    use_columns: List[str],
-    missing_use_name: str="NONE",
-    city_zone_name: str="city_zone"
+        data_frame: pd.DataFrame,
+        generator: Generator,
+        mapping: Dict[int, Set],
+        use_columns: List[str],
+        missing_use_name: str = "NONE",
+        city_zone_name: str = "city_zone"
 ) -> pd.DataFrame:
     """
     generates additional building uses through randomization
@@ -43,11 +41,11 @@ def randomize(
         choices = list(set(mapping[data_frame_copy.at[i, city_zone_name]]).difference(set(current_uses)))
         additional = generator.choice(choices, size=how_many_free_uses, replace=False)
         mask = additional == "NONE"
-        if mask.sum() == 2:    # both empty uses
+        if mask.sum() == 2:  # both empty uses
             pass
         elif mask.sum() == 0:  # no empty uses
             pass
-        else:                  # one empty use
+        else:  # one empty use
             temp = additional[~mask]
             additional = np.append(temp, "NONE")
         mask = list(compress(use_columns, row))
@@ -58,15 +56,15 @@ def randomize(
 
 
 def optimize(
-    target: float,
-    target_variables: List[str],
-    target_variable_min: int,
-    target_variable_max: int,
-    sub_building_footprint_area: Dict[str, int],
-    building_to_sub_building: Dict[str, List[str]],
-    range_additional_floors_per_building: Dict[str, List[int]],
-    per_use_gfa: Dict[str, int],
-    sub_building_use: Dict[str, str]
+        target: float,
+        target_variables: List[str],
+        target_variable_min: int,
+        target_variable_max: int,
+        sub_building_footprint_area: Dict[str, int],
+        building_to_sub_building: Dict[str, List[str]],
+        range_additional_floors_per_building: Dict[str, List[int]],
+        per_use_gfa: Dict[str, int],
+        sub_building_use: Dict[str, str]
 ):
     """TODO: docstring"""
     x_additional_floors = pulp.LpVariable.dict(
@@ -103,11 +101,11 @@ def _var_name(variable: pulp.LpVariable) -> str:
 
 
 def detailed_result_metrics(
-    solution: pulp.LpProblem,
-    sub_building_use: Dict,
-    sub_footprint_area: Dict,
-    per_use_gfa: Dict,
-    target: float
+        solution: pulp.LpProblem,
+        sub_building_use: Dict,
+        sub_footprint_area: Dict,
+        per_use_gfa: Dict,
+        target: float
 ) -> NoReturn:
     result = parse_milp_solution(solution)
     actual_use = {k: 0 for k in set(sub_building_use.values())}
@@ -117,8 +115,8 @@ def detailed_result_metrics(
     # checks
     abs_error, rel_error = calculate_result_metrics(solution, target, sub_footprint_area)
     print("compare target [%.1f] vs. actual [%.1f]" % (target, sum(sub_footprint_area[v] * result[v] for v in result)))
-    print("absolute error [%.4f]" %abs_error)
-    print("relative error [%.8f]" %rel_error)
+    print("absolute error [%.4f]" % abs_error)
+    print("relative error [%.8f]" % rel_error)
 
     metrics = dict()
     for use in actual_use:
@@ -136,9 +134,9 @@ def detailed_result_metrics(
 
 
 def calculate_result_metrics(
-    solution: pulp.LpProblem,
-    target: float,
-    sub_footprint_area: Dict[str, float]
+        solution: pulp.LpProblem,
+        target: float,
+        sub_footprint_area: Dict[str, float]
 ) -> Tuple[float, float]:
     res = parse_milp_solution(solution)
     abs_error = abs(target - sum(sub_footprint_area[v] * res[v] for v in res))
@@ -147,8 +145,8 @@ def calculate_result_metrics(
 
 
 def find_optimum_scenario(
-    optimizations: Dict[str, Dict],
-    target: float,
+        optimizations: Dict[str, Dict],
+        target: float,
 ):
     errors = dict()
     minimum = None
@@ -168,11 +166,11 @@ def find_optimum_scenario(
 
 
 def randomize_scenarios(
-    typology_merged: pd.DataFrame,
-    mapping: Dict[int, Set[str]],
-    use_columns: List[str],
-    scenario_count: int=1000,
-    seed: int=12357
+        typology_merged: pd.DataFrame,
+        mapping: Dict[int, Set[str]],
+        use_columns: List[str],
+        scenario_count: int = 1000,
+        seed: int = 12357
 ) -> Dict[int, pd.DataFrame]:
     scenarios = dict()
     generator = Generator(PCG64(seed))
@@ -197,7 +195,7 @@ def update_zone_shp_file(
     for b, sb in building_to_sub_building.items():
         for _sb in sb:
             floors_ag_updated[b] += result[_sb]
-            height_ag_updated[b] = floors_ag_updated[b]*3
+            height_ag_updated[b] = floors_ag_updated[b] * 3
             typology_merged.loc[b, "additional_floors"] = floors_ag_updated[b]
             typology_merged.loc[b, "floors_ag_updated"] = typology_merged.floors_ag[b] + floors_ag_updated[b]
             typology_merged.loc[b, "height_ag_updated"] = typology_merged.height_ag[b] + height_ag_updated[b]
@@ -205,7 +203,7 @@ def update_zone_shp_file(
     if path_to_input_zone_shape_file.exists():
         zone_shp_updated = GeoDataFrame.from_file(str(path_to_input_zone_shape_file.absolute()))
     else:
-        raise IOError("input zone.shp file [%s] does not exist" %path_to_input_zone_shape_file)
+        raise IOError("input zone.shp file [%s] does not exist" % path_to_input_zone_shape_file)
 
     zone_shp_updated = zone_shp_updated.set_index("Name")
     zone_shp_updated["floors_ag"] = typology_merged["floors_ag_updated"]
@@ -223,13 +221,13 @@ def parse_milp_solution(solution: pulp.LpProblem) -> Dict[str, int]:
 
 
 def update_typology_file(
-    solution: pulp.LpProblem,
-    status_quo_typology: pd.DataFrame,
-    optimized_typology: pd.DataFrame,
-    building_to_sub_building: Dict[str, List[str]],
-    path_to_output_typology_file: Path,
-    columns_to_keep: List[Tuple],
-    PARAMS
+        solution: pulp.LpProblem,
+        status_quo_typology: pd.DataFrame,
+        optimized_typology: pd.DataFrame,
+        building_to_sub_building: Dict[str, List[str]],
+        path_to_output_typology_file: Path,
+        columns_to_keep: List[Tuple],
+        PARAMS
 ) -> NoReturn:
     """
     updates use ratios: updated_use_ratio = updated_number_of_floors_use_type_X/updated_total_number_of_floors, where:
@@ -251,20 +249,21 @@ def update_typology_file(
         total_floors = current_floors + total_additional_floors
         for i, sub_building in enumerate(sub_buildings):
             sub_building_additional_floors = result[sub_building]
-            current_ratio = status_quo_typology.loc[building, use_col_dict[i]+'_R']
+            current_ratio = status_quo_typology.loc[building, use_col_dict[i] + '_R']
             updated_floors[use_col_dict[i]] = (sub_building_additional_floors + (current_ratio * current_floors))
             for use_col in updated_floors:
                 r = updated_floors[use_col] / total_floors
-                simulated_typology.loc[building, use_col+'_R'] = r
+                simulated_typology.loc[building, use_col + '_R'] = r
                 if np.isclose(r, 0.0):
                     simulated_typology.loc[building, use_col] = "NONE"
                 if simulated_typology.loc[building, use_col] == 'MULTI_RES':
                     if sub_building_additional_floors > 0 or status_quo_typology.loc[building, use_col] == 'SINGLE_RES':
-                        simulated_typology.loc[building, use_col] = PARAMS['MULTI_RES_USE_TYPE'] # FIXME: TAKE FROM INPUT
+                        simulated_typology.loc[building, use_col] = PARAMS[
+                            'MULTI_RES_USE_TYPE']  # FIXME: TAKE FROM INPUT
         if not np.isclose(total_floors, sum(updated_floors.values())):
             raise ValueError("total number of floors mis-match excpeted number of floors")
     if path_to_output_typology_file.exists():
-        raise IOError("output typology_updated.dbf file [%s] already exists" %path_to_output_typology_file)
+        raise IOError("output typology_updated.dbf file [%s] already exists" % path_to_output_typology_file)
     else:
         output = simulated_typology.copy()
         keep = list()
