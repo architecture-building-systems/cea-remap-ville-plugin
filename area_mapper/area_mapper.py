@@ -193,12 +193,11 @@ def update_zone_shp_file(
     height_ag_updated = defaultdict(int)
     result = parse_milp_solution(solution)
     for b, sb in building_to_sub_building.items():
-        for _sb in sb:
-            floors_ag_updated[b] += result[_sb]
-            height_ag_updated[b] = floors_ag_updated[b] * 3
-            typology_merged.loc[b, "additional_floors"] = floors_ag_updated[b]
-            typology_merged.loc[b, "floors_ag_updated"] = typology_merged.floors_ag[b] + floors_ag_updated[b]
-            typology_merged.loc[b, "height_ag_updated"] = typology_merged.height_ag[b] + height_ag_updated[b]
+        floors_ag_updated[b] = sum([result[_sb] for _sb in sb])
+        height_ag_updated[b] = floors_ag_updated[b] * 3
+        typology_merged.loc[b, "additional_floors"] = floors_ag_updated[b]
+        typology_merged.loc[b, "floors_ag_updated"] = typology_merged.floors_ag[b] + floors_ag_updated[b]
+        typology_merged.loc[b, "height_ag_updated"] = typology_merged.height_ag[b] + height_ag_updated[b]
 
     if path_to_input_zone_shape_file.exists():
         zone_shp_updated = GeoDataFrame.from_file(str(path_to_input_zone_shape_file.absolute()))
@@ -251,15 +250,15 @@ def update_typology_file(
             sub_building_additional_floors = result[sub_building]
             current_ratio = status_quo_typology.loc[building, use_col_dict[i] + '_R']
             updated_floors[use_col_dict[i]] = (sub_building_additional_floors + (current_ratio * current_floors))
-            for use_col in updated_floors:
-                r = updated_floors[use_col] / total_floors
-                simulated_typology.loc[building, use_col + '_R'] = r
-                if np.isclose(r, 0.0):
-                    simulated_typology.loc[building, use_col] = "NONE"
-                if simulated_typology.loc[building, use_col] == 'MULTI_RES':
-                    if sub_building_additional_floors > 0 or status_quo_typology.loc[building, use_col] == 'SINGLE_RES':
-                        simulated_typology.loc[building, use_col] = PARAMS[
-                            'MULTI_RES_USE_TYPE']  # FIXME: TAKE FROM INPUT
+        for use_col in updated_floors:
+            r = updated_floors[use_col] / total_floors
+            simulated_typology.loc[building, use_col + '_R'] = r
+            if np.isclose(r, 0.0):
+                simulated_typology.loc[building, use_col] = "NONE"
+            if simulated_typology.loc[building, use_col] == 'MULTI_RES':
+                if updated_floors[use_col] > 0 or status_quo_typology.loc[building, use_col] == 'SINGLE_RES':
+                    simulated_typology.loc[building, use_col] = PARAMS[
+                        'MULTI_RES_USE_TYPE']  # FIXME: TAKE FROM INPUT
         if not np.isclose(total_floors, sum(updated_floors.values())):
             raise ValueError("total number of floors mis-match excpeted number of floors")
     if path_to_output_typology_file.exists():
