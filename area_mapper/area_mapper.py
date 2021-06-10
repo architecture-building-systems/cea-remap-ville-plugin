@@ -17,7 +17,6 @@ from collections import defaultdict
 from pathlib import Path
 
 from cea.utilities.dbf import dataframe_to_dbf
-from area_mapper_sample import PARAMS
 
 import pulp
 import pandas as pd
@@ -65,7 +64,7 @@ def optimize(
     target_variable_max: int,
     sub_building_footprint_area: Dict[str, int],
     building_to_sub_building: Dict[str, List[str]],
-    building_zones: Dict[str, List[int]],
+    range_additional_floors_per_building: Dict[str, List[int]],
     per_use_gfa: Dict[str, int],
     sub_building_use: Dict[str, str]
 ):
@@ -84,7 +83,7 @@ def optimize(
     opt_problem += pulp.lpSum([x_additional_floors[i] * sub_building_footprint_area[i]
                                for i in target_variables]) <= target
     for building, sub_buildings in building_to_sub_building.items():
-        lower, upper = building_zones[building]
+        lower, upper = range_additional_floors_per_building[building]
         opt_problem += pulp.lpSum([x_additional_floors[i] for i in sub_buildings]) >= lower
         opt_problem += pulp.lpSum([x_additional_floors[i] for i in sub_buildings]) <= upper
     for use, sub_target in per_use_gfa.items():
@@ -230,6 +229,7 @@ def update_typology_file(
     building_to_sub_building: Dict[str, List[str]],
     path_to_output_typology_file: Path,
     columns_to_keep: List[Tuple],
+    PARAMS
 ) -> NoReturn:
     """
     updates use ratios: updated_use_ratio = updated_number_of_floors_use_type_X/updated_total_number_of_floors, where:

@@ -31,7 +31,7 @@ def sample_data_dir(PARAMS) -> Path:
     return p
 
 
-def sample_architecture_data(path_to_zone_shp, path_to_architecture) -> pd.DataFrame:
+def get_prop_geometry(path_to_zone_shp, path_to_architecture) -> pd.DataFrame:
     """
     combines zone.shp and architecture.dbf and calculate GFA
     :param path_to_zone_shp:
@@ -88,7 +88,7 @@ def sample_data(PARAMS) -> pd.DataFrame:
     path_to_zone_shp = sample_data_dir(PARAMS) / "zone.shp"
     if not path_to_zone_shp.exists():
         raise IOError("shape file not found [%s]" % path_to_zone_shp)
-    prop_geometries = sample_architecture_data(path_to_zone_shp, path_to_architecture)
+    prop_geometries = get_prop_geometry(path_to_zone_shp, path_to_architecture)
     typology = sample_typology_data(PARAMS)
     typology_merged = typology.merge(prop_geometries, left_index=True, right_on='Name')
     typology_merged.floors_ag = typology_merged.floors_ag.astype(int)
