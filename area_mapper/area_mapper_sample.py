@@ -51,21 +51,17 @@ def main():
     all_known_use_types = set([leaf
                                for tree in typology_merged[typology_use_columns()].values
                                for leaf in tree])
-    # check if all use types are known # FIXME: is it true?
-    assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone])
-    current_gfa_per_use, gfa_ratio_per_use_type = calculate_per_use_gfa(typology_merged)
+    # check if all use types are known
+    assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone]) # FIXME: is it true?
+    current_gfa_per_use, gfa_ratio_per_use = calc_gfa_per_use(typology_merged)
     current_gfa_per_use.to_csv(os.path.join(sample_data_dir(PARAMS), "current_gfa_per_use_type.csv"))
     # FIXME: below is a work-around to remove MULTI_RES_2040
-    if PARAMS['MULTI_RES_USE_TYPE'] in current_gfa_per_use.index:
-        future_planned_res_gfa = current_gfa_per_use["MULTI_RES_2040"]
-        current_gfa_per_use.drop("MULTI_RES_2040", inplace=True)
-        gfa_ratio_per_use_type.drop("MULTI_RES_2040", inplace=True)
-    else:
-        future_planned_res_gfa = 0.0
+    current_gfa_per_use, gfa_ratio_per_use, \
+    future_planned_res_gfa = get_planned_residential_area(PARAMS, current_gfa_per_use, gfa_ratio_per_use)
 
     # set target gfa ratios # FIXME: get from files
-    relative_gfa_ratio_to_res = (gfa_ratio_per_use_type
-                                 / (gfa_ratio_per_use_type.SINGLE_RES + gfa_ratio_per_use_type.MULTI_RES))  # 2020
+    relative_gfa_ratio_to_res = (gfa_ratio_per_use
+                                 / (gfa_ratio_per_use.SINGLE_RES + gfa_ratio_per_use.MULTI_RES))  # 2020
 
     # calculate future required area per use type
     future_required_additional_res_gfa, \
@@ -119,17 +115,18 @@ def main():
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
     buildings_SINGLE_RES = list(buildings_kept.loc[buildings_kept['1ST_USE'] == 'SINGLE_RES'].index)
     num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * PARAMS['SINGLE_to_MULTI_RES_ratio'])
-    buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
-    for building in buildings_to_MULTI_RES:
-        buildings_kept.loc[building, :] = buildings_kept.loc[building].replace({"SINGLE_RES": "MULTI_RES"})
-    # FIXME: add the area of replaced SFH to equivalent target_per_use_gfa["MULTI_RES"]
+    if num_buildings_to_MULTI_RES > 0:
+        buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
+        for building in buildings_to_MULTI_RES:
+            buildings_kept.loc[building, :] = buildings_kept.loc[building].replace({"SINGLE_RES": "MULTI_RES"})
+            # FIXME: add the area of replaced SFH to equivalent target_per_use_gfa["MULTI_RES"]
 
     # create random scenarios
     scenarios = amap.randomize_scenarios(
         typology_merged=buildings_kept,
         mapping=sample_mapping(),
         use_columns=typology_use_columns(),
-        scenario_count=10,
+        scenario_count=2,
     )
 
     # built area allocation for all scenarios
@@ -228,6 +225,16 @@ def main():
     return
 
 
+def get_planned_residential_area(PARAMS, current_gfa_per_use, gfa_ratio_per_use_type):
+    if PARAMS['MULTI_RES_USE_TYPE'] in current_gfa_per_use.index:
+        future_planned_res_gfa = current_gfa_per_use["MULTI_RES_2040"]
+        current_gfa_per_use.drop("MULTI_RES_2040", inplace=True)
+        gfa_ratio_per_use_type.drop("MULTI_RES_2040", inplace=True)
+    else:
+        future_planned_res_gfa = 0.0
+    return current_gfa_per_use, gfa_ratio_per_use_type, future_planned_res_gfa
+
+
 def sample_data_dir(PARAMS) -> Path:
     p = Path(os.path.join(PARAMS['path'], 'area_mapper\sample_data'))
     if not p.exists():
@@ -320,7 +327,7 @@ def sample_mapping() -> Dict[int, Set[str]]:
     }
 
 
-def calculate_per_use_gfa(typology_merged: pd.DataFrame):
+def calc_gfa_per_use(typology_merged: pd.DataFrame):
     """
     calculates GFA per use type based on the 1st use, 2nd use and 3rd use [m2]
     :param typology_merged:
