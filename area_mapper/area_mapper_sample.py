@@ -24,126 +24,6 @@ from cea.utilities.dbf import dbf_to_dataframe
 from cea.demand.building_properties import calc_useful_areas
 
 
-def sample_data_dir(PARAMS) -> Path:
-    p = Path(os.path.join(PARAMS['path'], 'area_mapper\sample_data'))
-    if not p.exists():
-        raise IOError("data_dir not found [%s]" % p)
-    return p
-
-
-def get_prop_geometry(path_to_zone_shp, path_to_architecture) -> pd.DataFrame:
-    """
-    combines zone.shp and architecture.dbf and calculate GFA
-    :param path_to_zone_shp:
-    :param path_to_architecture:
-    :return:
-    """
-    architecture = dbf_to_dataframe(path_to_architecture).set_index('Name')
-    prop_geometry = GeoDataFrame.from_file(str(path_to_zone_shp.absolute()))
-    prop_geometry['footprint'] = prop_geometry.area
-    prop_geometry['GFA_m2'] = prop_geometry['footprint'] * (prop_geometry['floors_ag'] + prop_geometry['floors_bg'])
-    prop_geometry['GFA_ag_m2'] = prop_geometry['footprint'] * prop_geometry['floors_ag']
-    prop_geometry['GFA_bg_m2'] = prop_geometry['footprint'] * prop_geometry['floors_bg']
-    prop_geometry = prop_geometry.merge(architecture, on='Name').set_index('Name')
-    prop_geometry = calc_useful_areas(prop_geometry)
-
-    return prop_geometry
-
-
-def sample_typology_data(PARAMS) -> pd.DataFrame:
-    path_to_typology = sample_data_dir(PARAMS) / "typology.dbf"
-    typology = dbf_to_dataframe(path_to_typology).set_index('Name', drop=False)
-    return typology
-
-
-def filter_buildings_by_year_sample_data(typology_merged: pd.DataFrame, year: int, less_than: bool = True):
-    if "YEAR" not in typology_merged:
-        raise KeyError("provided data frame is missing the column 'YEAR'")
-    if less_than:
-        op = operator.lt
-    else:
-        op = operator.gt
-    return typology_merged[op(typology_merged.YEAR, year)]
-
-
-def filter_buildings_by_use_sample_data(typology_merged: pd.DataFrame, use_to_be_filtered: str):
-    typology_copy = typology_merged.copy()
-    building_names = typology_merged.index
-    # drop MULTI_RES_2040 buildings
-    typology_merged = typology_merged.drop(typology_merged[typology_merged["1ST_USE"] == use_to_be_filtered].index)
-    building_names_remained = typology_merged.index
-    dropped_buildings_by_use = typology_copy.loc[list(set(building_names) - set(building_names_remained))]
-    return typology_merged, dropped_buildings_by_use
-
-
-def sample_data(PARAMS) -> pd.DataFrame:
-    """
-    merges topology.dbf and architecture.dbf, calculate GFA, and initiates empty columns
-    :return:
-    """
-    # READ
-    path_to_architecture = sample_data_dir(PARAMS) / "architecture.dbf"
-    if not path_to_architecture.exists():
-        raise IOError("architecture file not found [%s]" % path_to_architecture)
-    path_to_zone_shp = sample_data_dir(PARAMS) / "zone.shp"
-    if not path_to_zone_shp.exists():
-        raise IOError("shape file not found [%s]" % path_to_zone_shp)
-    prop_geometries = get_prop_geometry(path_to_zone_shp, path_to_architecture)
-    typology = sample_typology_data(PARAMS)
-    typology_merged = typology.merge(prop_geometries, left_index=True, right_on='Name')
-    typology_merged.floors_ag = typology_merged.floors_ag.astype(int)
-
-    typology_merged["city_zone"] = 1
-    typology_merged["additional_floors"] = 0
-    typology_merged["floors_ag_updated"] = typology_merged.floors_ag.astype(int)
-    typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
-
-    return typology_merged
-
-
-def typology_use_columns() -> List[str]:
-    return ["1ST_USE", "2ND_USE", "3RD_USE"]
-
-
-def sample_mapping() -> Dict[int, Set[str]]:
-    """
-    possible building uses per city zone
-    :return:
-    """
-    return {
-        1: {"SINGLE_RES", "MULTI_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL",
-            "GYM", "SCHOOL", "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL"},
-    }
-
-
-def calculate_per_use_gfa(typology_merged: pd.DataFrame):
-    """
-    calculates GFA per use type based on the 1st use, 2nd use and 3rd use [m2]
-    :param typology_merged:
-    :return:
-    """
-    typology_merged["GFA_1ST_USE"] = typology_merged["1ST_USE_R"] * typology_merged["GFA_m2"]
-    typology_merged["GFA_2ND_USE"] = typology_merged["2ND_USE_R"] * typology_merged["GFA_m2"]
-    typology_merged["GFA_3RD_USE"] = typology_merged["3RD_USE_R"] * typology_merged["GFA_m2"]
-
-    gfa_series_1st_use = typology_merged.groupby("1ST_USE").sum().loc[:, "GFA_1ST_USE"]
-    gfa_series_2nd_use = typology_merged.groupby("2ND_USE").sum().loc[:, "GFA_2ND_USE"]
-    gfa_series_3rd_use = typology_merged.groupby("3RD_USE").sum().loc[:, "GFA_3RD_USE"]
-
-    gfa_per_use_type = defaultdict(float)
-    for use_series in [gfa_series_1st_use, gfa_series_2nd_use, gfa_series_3rd_use]:
-        for use, val in use_series.iteritems():
-            gfa_per_use_type[use] += val
-
-    # get rid of the unwanted "NONE" use-type
-    del gfa_per_use_type["NONE"]
-
-    gfa_per_use_type = pd.Series(gfa_per_use_type)
-    gfa_ratio_per_use_type = gfa_per_use_type / gfa_per_use_type.sum()
-
-    return gfa_per_use_type, gfa_ratio_per_use_type
-
-
 def main():
     PARAMS = {
         # scenario-specific
@@ -345,6 +225,127 @@ def main():
                          ("REFERENCE", str)],
         PARAMS=PARAMS
     )
+    return
+
+
+def sample_data_dir(PARAMS) -> Path:
+    p = Path(os.path.join(PARAMS['path'], 'area_mapper\sample_data'))
+    if not p.exists():
+        raise IOError("data_dir not found [%s]" % p)
+    return p
+
+
+def get_prop_geometry(path_to_zone_shp, path_to_architecture) -> pd.DataFrame:
+    """
+    combines zone.shp and architecture.dbf and calculate GFA
+    :param path_to_zone_shp:
+    :param path_to_architecture:
+    :return:
+    """
+    architecture = dbf_to_dataframe(path_to_architecture).set_index('Name')
+    prop_geometry = GeoDataFrame.from_file(str(path_to_zone_shp.absolute()))
+    prop_geometry['footprint'] = prop_geometry.area
+    prop_geometry['GFA_m2'] = prop_geometry['footprint'] * (prop_geometry['floors_ag'] + prop_geometry['floors_bg'])
+    prop_geometry['GFA_ag_m2'] = prop_geometry['footprint'] * prop_geometry['floors_ag']
+    prop_geometry['GFA_bg_m2'] = prop_geometry['footprint'] * prop_geometry['floors_bg']
+    prop_geometry = prop_geometry.merge(architecture, on='Name').set_index('Name')
+    prop_geometry = calc_useful_areas(prop_geometry)
+
+    return prop_geometry
+
+
+def sample_typology_data(PARAMS) -> pd.DataFrame:
+    path_to_typology = sample_data_dir(PARAMS) / "typology.dbf"
+    typology = dbf_to_dataframe(path_to_typology).set_index('Name', drop=False)
+    return typology
+
+
+def filter_buildings_by_year_sample_data(typology_merged: pd.DataFrame, year: int, less_than: bool = True):
+    if "YEAR" not in typology_merged:
+        raise KeyError("provided data frame is missing the column 'YEAR'")
+    if less_than:
+        op = operator.lt
+    else:
+        op = operator.gt
+    return typology_merged[op(typology_merged.YEAR, year)]
+
+
+def filter_buildings_by_use_sample_data(typology_merged: pd.DataFrame, use_to_be_filtered: str):
+    typology_copy = typology_merged.copy()
+    building_names = typology_merged.index
+    # drop MULTI_RES_2040 buildings
+    typology_merged = typology_merged.drop(typology_merged[typology_merged["1ST_USE"] == use_to_be_filtered].index)
+    building_names_remained = typology_merged.index
+    dropped_buildings_by_use = typology_copy.loc[list(set(building_names) - set(building_names_remained))]
+    return typology_merged, dropped_buildings_by_use
+
+
+def sample_data(PARAMS) -> pd.DataFrame:
+    """
+    merges topology.dbf and architecture.dbf, calculate GFA, and initiates empty columns
+    :return:
+    """
+    # READ
+    path_to_architecture = sample_data_dir(PARAMS) / "architecture.dbf"
+    if not path_to_architecture.exists():
+        raise IOError("architecture file not found [%s]" % path_to_architecture)
+    path_to_zone_shp = sample_data_dir(PARAMS) / "zone.shp"
+    if not path_to_zone_shp.exists():
+        raise IOError("shape file not found [%s]" % path_to_zone_shp)
+    prop_geometries = get_prop_geometry(path_to_zone_shp, path_to_architecture)
+    typology = sample_typology_data(PARAMS)
+    typology_merged = typology.merge(prop_geometries, left_index=True, right_on='Name')
+    typology_merged.floors_ag = typology_merged.floors_ag.astype(int)
+
+    typology_merged["city_zone"] = 1
+    typology_merged["additional_floors"] = 0
+    typology_merged["floors_ag_updated"] = typology_merged.floors_ag.astype(int)
+    typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
+
+    return typology_merged
+
+
+def typology_use_columns() -> List[str]:
+    return ["1ST_USE", "2ND_USE", "3RD_USE"]
+
+
+def sample_mapping() -> Dict[int, Set[str]]:
+    """
+    possible building uses per city zone
+    :return:
+    """
+    return {
+        1: {"SINGLE_RES", "MULTI_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL",
+            "GYM", "SCHOOL", "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL"},
+    }
+
+
+def calculate_per_use_gfa(typology_merged: pd.DataFrame):
+    """
+    calculates GFA per use type based on the 1st use, 2nd use and 3rd use [m2]
+    :param typology_merged:
+    :return:
+    """
+    typology_merged["GFA_1ST_USE"] = typology_merged["1ST_USE_R"] * typology_merged["GFA_m2"]
+    typology_merged["GFA_2ND_USE"] = typology_merged["2ND_USE_R"] * typology_merged["GFA_m2"]
+    typology_merged["GFA_3RD_USE"] = typology_merged["3RD_USE_R"] * typology_merged["GFA_m2"]
+
+    gfa_series_1st_use = typology_merged.groupby("1ST_USE").sum().loc[:, "GFA_1ST_USE"]
+    gfa_series_2nd_use = typology_merged.groupby("2ND_USE").sum().loc[:, "GFA_2ND_USE"]
+    gfa_series_3rd_use = typology_merged.groupby("3RD_USE").sum().loc[:, "GFA_3RD_USE"]
+
+    gfa_per_use_type = defaultdict(float)
+    for use_series in [gfa_series_1st_use, gfa_series_2nd_use, gfa_series_3rd_use]:
+        for use, val in use_series.iteritems():
+            gfa_per_use_type[use] += val
+
+    # get rid of the unwanted "NONE" use-type
+    del gfa_per_use_type["NONE"]
+
+    gfa_per_use_type = pd.Series(gfa_per_use_type)
+    gfa_ratio_per_use_type = gfa_per_use_type / gfa_per_use_type.sum()
+
+    return gfa_per_use_type, gfa_ratio_per_use_type
 
 
 def check_ratio(future_required_gfa_series, total_future_required_gfa):
