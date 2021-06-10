@@ -1,13 +1,13 @@
 __author__ = "Anastasiya Popova"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
-__credits__ = ["Daren Thomas"]
+__credits__ = ["Anastasiya Popova"]
 __license__ = "MIT"
 __version__ = "0.1"
 __maintainer__ = "Anastasiya Popova"
 __email__ = "cea@arch.ethz.ch"
 __status__ = "Production"
 
-
+import os
 import pandas as pd
 import numpy as np
 import operator
@@ -25,27 +25,30 @@ from cea.demand.building_properties import calc_useful_areas
 
 
 PARAMS = {
+    # scenario-specific
+    'path': r"C:\Users\shsieh\Nextcloud\VILLE\Case studies\Echallens\04062021_test_run_input_files\future_2040",
     'additional_population': 2175,  # people, 7900 - 5725 # TODO: add population model to store the data
     'future_occupant_density': 50,  # living space m2/occupants
-    'ratio_living_space_to_GFA': 0.82,
-    'floor_height': 3,  # m
     'building_height_limit': 24,  # m
-    'min_additional_floors': 0,
-    'max_additional_floors': 10,
+    'MULTI_RES_USE_TYPE': 'MULTI_RES_2040',
     'preserve_buildings_built_before': 1920,
     'SINGLE_to_MULTI_RES_ratio': 0.0,
-    'MULTI_RES_USE_TYPE': 'MULTI_RES_2040'
+    'max_additional_floors': 10,
+    # constants
+    'ratio_living_space_to_GFA': 0.82,
+    'floor_height': 3,  # m
+    'min_additional_floors': 0,
 }
 
 
-def data_dir() -> Path:
-    p = Path().absolute() / "sample_data"
+def sample_data_dir() -> Path:
+    p = Path(os.path.join(PARAMS['path'], 'area_mapper\sample_data'))
     if not p.exists():
         raise IOError("data_dir not found [%s]" % p)
     return p
 
 
-def sample_architecture_data(path: Path = data_dir()) -> pd.DataFrame:
+def sample_architecture_data(path: Path = sample_data_dir()) -> pd.DataFrame:
     path_to_architecture = path / "architecture.dbf"
     if not path_to_architecture.exists():
         raise IOError("architecture file not found [%s]" % path_to_architecture)
@@ -66,7 +69,7 @@ def sample_architecture_data(path: Path = data_dir()) -> pd.DataFrame:
     return prop_geometry
 
 
-def sample_typology_data(path: Path = data_dir()) -> pd.DataFrame:
+def sample_typology_data(path: Path = sample_data_dir()) -> pd.DataFrame:
     path_to_typology = path / "typology.dbf"
     typology = dbf_to_dataframe(path_to_typology).set_index('Name', drop=False)
     return typology
@@ -152,15 +155,8 @@ def calculate_per_use_gfa(typology_merged: pd.DataFrame):
 
 
 def main():
-    # if True, cleans the output files in sample_data folder
-    clean = True
-    if clean:
-        import os
-        data_files = os.listdir(data_dir())
-        for file in data_files:
-            if file.find("_update") >= 0:
-                print("cleaning: [%s]" % (data_dir() / file))
-                Path(data_dir() / file).unlink()
+
+    remove_updated_files(clean=True) # if True, cleans the output files in sample_data folder
 
     typology_merged = sample_data()
 
@@ -169,57 +165,48 @@ def main():
                                for leaf in tree])
     # check if all use types are known # FIXME: is it true?
     assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone])
-    gfa_per_use_type, gfa_ratio_per_use_type = calculate_per_use_gfa(typology_merged)
+    current_gfa_per_use, gfa_ratio_per_use_type = calculate_per_use_gfa(typology_merged)
+    current_gfa_per_use.to_csv(os.path.join(sample_data_dir(), "current_gfa_per_use_type.csv"))
     # FIXME: below is a work-around to remove MULTI_RES_2040
-    gfa_future_MULTI_RES = gfa_per_use_type["MULTI_RES_2040"]
-    gfa_per_use_type.drop("MULTI_RES_2040", inplace=True)
-    gfa_ratio_per_use_type.drop("MULTI_RES_2040", inplace=True)
+    if PARAMS['MULTI_RES_USE_TYPE'] in current_gfa_per_use.index:
+        future_planned_res_gfa = current_gfa_per_use["MULTI_RES_2040"]
+        current_gfa_per_use.drop("MULTI_RES_2040", inplace=True)
+        gfa_ratio_per_use_type.drop("MULTI_RES_2040", inplace=True)
+    else:
+        future_planned_res_gfa = 0.0
 
     # set target gfa ratios # FIXME: get from files
     relative_gfa_ratio_to_res = (gfa_ratio_per_use_type
                                  / (gfa_ratio_per_use_type.SINGLE_RES + gfa_ratio_per_use_type.MULTI_RES)) # 2020
 
     # calculate future required area per use type
-    future_required_additional_res_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
-    future_required_additional_res_gfa = future_required_additional_res_living_space / PARAMS['ratio_living_space_to_GFA']
-    future_required_res_gfa = (future_required_additional_res_gfa +
-                               gfa_per_use_type.SINGLE_RES + gfa_per_use_type.MULTI_RES)
-
+    future_required_additional_res_gfa, future_required_res_gfa = calc_future_required_residential_gfa(current_gfa_per_use)
     future_required_gfa_dict = dict()
     for use_type in relative_gfa_ratio_to_res.index:
         if use_type == "SINGLE_RES":
-            future_required_gfa_dict[use_type] = gfa_per_use_type[use_type] # TODO: conflict in coming lines
+            future_required_gfa_dict[use_type] = current_gfa_per_use[use_type] # TODO: update if convert SFH to MFH
         elif use_type == "MULTI_RES":
-            future_required_gfa_dict[use_type] = future_required_additional_res_gfa + gfa_per_use_type[use_type]
+            future_required_gfa_dict[use_type] = future_required_additional_res_gfa + current_gfa_per_use[use_type]
         else:
-            # if use_type != 'MULTI_RES_2040': # avoid adding future buildings to target #FIXME: to be removed
             future_required_gfa_dict.update({use_type: future_required_res_gfa * relative_gfa_ratio_to_res[use_type]})
+    future_required_gfa_per_use = pd.Series(future_required_gfa_dict)
+    future_required_gfa_per_use = future_required_gfa_per_use.astype(int)
+    future_required_gfa_per_use.to_csv(os.path.join(sample_data_dir(), "future_required_gfa_per_use.csv"))
+    total_future_required_gfa = future_required_gfa_per_use.sum()
+    check_ratio(future_required_gfa_per_use, total_future_required_gfa)
 
-    future_required_gfa_series = pd.Series(future_required_gfa_dict)
-    future_required_gfa_series = future_required_gfa_series.astype(int)
-    future_required_gfa_series.to_csv(os.path.join(Path().absolute(), "sample_data/future_required_gfa_series")) # FIXME: to be removed
-    total_future_required_gfa = future_required_gfa_series.sum()
-
-    # calculate future use ratio based on GFA
-    future_required_gfa_ratio = future_required_gfa_series / total_future_required_gfa
-    if not np.isclose(future_required_gfa_ratio.sum(), 1.0):
-        raise ValueError("sum of use-ratios does not equal 1.0, instead [%f]" %future_required_gfa_ratio.sum())
-
-    # calculate additional required GFA as (future required area - existing area)
-    additional_required_gfa = future_required_gfa_series - gfa_per_use_type
+    ## calculate additional required GFA as (future required area - current existing area)
+    additional_required_gfa_per_use = future_required_gfa_per_use - current_gfa_per_use
     # remove MULTI_RES_2040 from additional required area
-    additional_required_gfa["MULTI_RES"] = additional_required_gfa["MULTI_RES"] - gfa_future_MULTI_RES #
-    target_per_use_gfa = additional_required_gfa.astype(int).to_dict()
+    additional_required_gfa_per_use["MULTI_RES"] = additional_required_gfa_per_use["MULTI_RES"] - future_planned_res_gfa
+    target_per_use_gfa = additional_required_gfa_per_use.astype(int).to_dict()
 
-    # upper bound = maximum_allowed_building_height / floor_height
-    city_zones = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])}
-
-    # calculate possible range of additional floors for each building
-    range_additional_floors = dict()
+    ## calculate possible range of additional floors for each building
+    height_limit_per_city_zone = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])}
+    range_additional_floors_per_building = dict()
     for name, building in typology_merged.iterrows():
-        min_floors, max_floors = city_zones[building.city_zone]
-        range_additional_floors[name] = [0, max(0, max_floors - building.floors_ag)]
-    building_zones = {building: range_additional_floors[building] for building in typology_merged.index}
+        min_floors, max_floors = height_limit_per_city_zone[building.city_zone]
+        range_additional_floors_per_building[name] = [0, max(0, max_floors - building.floors_ag)]
 
     # filter out buildings by use
     buildings_filtered_out_by_use, dropped_buildings_by_use = filter_buildings_by_use_sample_data(
@@ -260,7 +247,7 @@ def main():
     # built area allocation for all scenarios
     optimizations = dict()
     metrics = dict()
-    target = additional_required_gfa.sum()
+    target = additional_required_gfa_per_use.sum()
     for scenario in scenarios:
         scenario_typology_merged = scenarios[scenario]
 
@@ -296,7 +283,7 @@ def main():
             PARAMS['max_additional_floors'],
             sub_footprint_area,
             building_to_sub_building,
-            building_zones,
+            range_additional_floors_per_building,
             target_per_use_gfa,
             sub_building_use
         )
@@ -336,19 +323,45 @@ def main():
         solution=optimizations[best_scenario]["solution"],
         typology_merged=typology_df,
         building_to_sub_building=optimizations[best_scenario]["building_to_sub_building"],
-        path_to_input_zone_shape_file=data_dir() / "zone.shp",
-        path_to_output_zone_shape_file=data_dir() / "zone_updated.shp"
+        path_to_input_zone_shape_file=sample_data_dir() / "zone.shp",
+        path_to_output_zone_shape_file=sample_data_dir() / "zone_updated.shp"
     )
     amap.update_typology_file(
         solution=optimizations[best_scenario]["solution"],
         status_quo_typology=typology_merged,
         optimized_typology=typology_df,
         building_to_sub_building=optimizations[best_scenario]["building_to_sub_building"],
-        path_to_output_typology_file=data_dir() / "typology_updated.dbf",
+        path_to_output_typology_file=sample_data_dir() / "typology_updated.dbf",
         columns_to_keep=[("Name", str), ("YEAR", int), ("STANDARD", str), ("1ST_USE", str), ("1ST_USE_R", float),
                          ("2ND_USE", str), ("2ND_USE_R", float), ("3RD_USE", str), ("3RD_USE_R", float),
                          ("REFERENCE", str)]
     )
+
+
+def check_ratio(future_required_gfa_series, total_future_required_gfa):
+    # calculate future use ratio based on GFA
+    future_required_gfa_ratio = future_required_gfa_series / total_future_required_gfa
+    if not np.isclose(future_required_gfa_ratio.sum(), 1.0):
+        raise ValueError("sum of use-ratios does not equal 1.0, instead [%f]" % future_required_gfa_ratio.sum())
+
+
+def calc_future_required_residential_gfa(gfa_per_use_type):
+    future_required_additional_res_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
+    future_required_additional_res_gfa = future_required_additional_res_living_space / PARAMS[
+        'ratio_living_space_to_GFA']
+    future_required_res_gfa = (future_required_additional_res_gfa +
+                               gfa_per_use_type.SINGLE_RES + gfa_per_use_type.MULTI_RES)
+    return future_required_additional_res_gfa, future_required_res_gfa
+
+
+def remove_updated_files(clean):
+    if clean:
+        data_files = os.listdir(sample_data_dir())
+        for file in data_files:
+            if file.find("_update") >= 0:
+                print("cleaning: [%s]" % (sample_data_dir() / file))
+                Path(sample_data_dir() / file).unlink()
+    return
 
 
 if __name__ == "__main__":
