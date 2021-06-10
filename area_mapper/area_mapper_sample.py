@@ -94,9 +94,9 @@ def main():
         range_additional_floors_per_building[name] = [0, max(0, max_floors - building.floors_ag)]
 
     # filter out buildings by use
-    buildings_filtered_out_by_use, dropped_buildings_by_use = filter_buildings_by_use_sample_data(
+    buildings_filtered_out_by_use, typology_untouched_uses = filter_buildings_by_uses(
         typology_merged,
-        use_to_be_filtered=PARAMS["MULTI_RES_USE_TYPE"],
+        uses_untouched=[PARAMS["MULTI_RES_USE_TYPE"], "SINGLE_RES"],
     )
 
     # keep old buildings unchanged
@@ -203,7 +203,7 @@ def main():
     typology_df = scenarios[best_scenario].copy()
     # add back those buildings initially filtered out
     typology_df = typology_df.append(buildings_filtered_out_by_age, sort=True)
-    typology_df = typology_df.append(dropped_buildings_by_use, sort=True)
+    typology_df = typology_df.append(typology_untouched_uses, sort=True)
     amap.update_zone_shp_file(
         solution=optimizations[best_scenario]["solution"],
         typology_merged=typology_df,
@@ -277,14 +277,14 @@ def filter_buildings_by_year_sample_data(typology_merged: pd.DataFrame, year: in
     return typology_merged[op(typology_merged.YEAR, year)]
 
 
-def filter_buildings_by_use_sample_data(typology_merged: pd.DataFrame, use_to_be_filtered: str):
-    typology_copy = typology_merged.copy()
-    building_names = typology_merged.index
-    # drop MULTI_RES_2040 buildings
-    typology_merged = typology_merged.drop(typology_merged[typology_merged["1ST_USE"] == use_to_be_filtered].index)
+def filter_buildings_by_uses(typology_merged: pd.DataFrame, uses_untouched: list):
+    typology_orig = typology_merged.copy()
+    orig_building_names = typology_orig.index
+    for use in uses_untouched:
+        typology_merged = typology_merged.drop(typology_merged[typology_merged["1ST_USE"] == use].index)
     building_names_remained = typology_merged.index
-    dropped_buildings_by_use = typology_copy.loc[list(set(building_names) - set(building_names_remained))]
-    return typology_merged, dropped_buildings_by_use
+    typology_untouched_uses = typology_orig.loc[list(set(orig_building_names) - set(building_names_remained))]
+    return typology_merged, typology_untouched_uses
 
 
 def sample_data(PARAMS) -> pd.DataFrame:
