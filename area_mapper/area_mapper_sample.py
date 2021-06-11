@@ -31,7 +31,8 @@ def main():
         'additional_population': 2175,  # people
         'future_occupant_density': 50,  # living space m2/occupants
         'building_height_limit': 24,  # m
-        'MULTI_RES_USE_TYPE': 'MULTI_RES_2040',
+        'MULTI_RES_PLANNED': 'MULTI_RES_2040',
+        'USES_UNTOUCH': ['SINGLE_RES'],
         'preserve_buildings_built_before': 1920,
         'SINGLE_to_MULTI_RES_ratio': 0.0,
         'max_additional_floors': 10,
@@ -47,72 +48,74 @@ def main():
 
     remove_updated_files(PARAMS, clean=True)  # if True, cleans the output files in sample_data folder
 
-    typology_status_quo = sample_data(PARAMS)
-
+    ## Read typology_merged
+    typology_merged = sample_data(PARAMS)
     all_known_use_types = set([leaf
-                               for tree in typology_status_quo[typology_use_columns()].values
+                               for tree in typology_merged[typology_use_columns()].values
                                for leaf in tree])
     # check if all use types are known
-    assert all([use in all_known_use_types for _, zone in sample_mapping().items() for use in zone]) # FIXME: is it true?
+    assert all(
+        [use in all_known_use_types for _, zone in sample_mapping().items() for use in zone])  # FIXME: is it true?
 
-    # get current status and future planned residential area
-    current_gfa_per_use, gfa_ratio_per_use = calc_gfa_per_use(typology_status_quo)
-    current_gfa_per_use.to_csv(os.path.join(sample_data_dir(PARAMS), "current_gfa_per_use_type.csv"))
-    # REMOVE FUTURE PLANNED AREA
-    current_gfa_per_use, gfa_ratio_per_use, \
-    future_planned_res_gfa = get_planned_residential_area(PARAMS, current_gfa_per_use, gfa_ratio_per_use)
+    ## get typology_statusquo and typology_planned
+    typology_statusquo = typology_merged.copy()
+    typology_statusquo, typology_planned = remove_buildings_by_uses(typology_statusquo,
+                                                                    uses_to_remove=[PARAMS['MULTI_RES_PLANNED']])
+    gfa_per_use_statusquo = calc_gfa_per_use(typology_statusquo)
+    gfa_per_use_statusquo.to_csv(os.path.join(sample_data_dir(PARAMS), "current_gfa_per_use_type.csv"))
+    gfa_per_use_planned = calc_gfa_per_use(typology_planned)
+    gfa_res_planned = gfa_per_use_planned[PARAMS['MULTI_RES_PLANNED']]
+
     # TODO: KEEP "FUTURE RESERVED AREA" TO BUILD MULTI_RES
     ## SET TARGET GFA RATIOS # FIXME: get from files
-    relative_gfa_ratio_to_res = (gfa_ratio_per_use
-                                 / (gfa_ratio_per_use.SINGLE_RES + gfa_ratio_per_use.MULTI_RES))  # 2020
+    rel_ratio_to_res_gfa_statusquo = (gfa_per_use_statusquo
+                                      / (gfa_per_use_statusquo.SINGLE_RES + gfa_per_use_statusquo.MULTI_RES))  # 2020
 
     # calculate future required area per use type
-    future_required_additional_res_gfa, \
-    future_required_res_gfa = calc_future_required_residential_gfa(current_gfa_per_use, PARAMS)
+    future_required_additional_res_gfa = calc_additional_requied_residential_gfa(PARAMS)
+    future_required_res_gfa = (future_required_additional_res_gfa + gfa_per_use_statusquo.filter(like="_RES").sum())
     future_required_gfa_dict = dict()
-    for use_type in relative_gfa_ratio_to_res.index:
-        if use_type == "SINGLE_RES" or use_type == "MULTI_RES_2040": # FIXME: add residential kept unchanged to input
-            future_required_gfa_dict[use_type] = current_gfa_per_use[use_type]
+    for use_type in rel_ratio_to_res_gfa_statusquo.index:
+        if use_type == "SINGLE_RES":
+            future_required_gfa_dict[use_type] = gfa_per_use_statusquo[use_type]  # unchanged
         elif use_type == "MULTI_RES":
-            future_required_gfa_dict[use_type] = future_required_additional_res_gfa + current_gfa_per_use[use_type]
+            future_required_gfa_dict[use_type] = future_required_additional_res_gfa + gfa_per_use_statusquo[use_type]
         else:
-            future_required_gfa_dict.update({use_type: future_required_res_gfa * relative_gfa_ratio_to_res[use_type]})
+            future_required_gfa_dict.update(
+                {use_type: future_required_res_gfa * rel_ratio_to_res_gfa_statusquo[use_type]})
     future_required_gfa_per_use = pd.Series(future_required_gfa_dict)
 
     ## calculate target_per_use_gfa
-    additional_required_gfa_per_use = future_required_gfa_per_use - current_gfa_per_use
-    # remove MULTI_RES_2040 from additional required area
-    additional_required_gfa_per_use["MULTI_RES"] = additional_required_gfa_per_use["MULTI_RES"] - future_planned_res_gfa
+    additional_required_gfa_per_use = future_required_gfa_per_use - gfa_per_use_statusquo
+    additional_required_gfa_per_use["MULTI_RES"] = additional_required_gfa_per_use["MULTI_RES"] - gfa_res_planned
+
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
-    buildings_SINGLE_RES = list(typology_status_quo.loc[typology_status_quo['1ST_USE'] == 'SINGLE_RES'].index)
+    buildings_SINGLE_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SINGLE_RES'].index)
     num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * PARAMS['SINGLE_to_MULTI_RES_ratio'])
     if num_buildings_to_MULTI_RES > 0.0:
         buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
-        extra_gfa_from_SINGLE_RES_conversion, gfa_to_MULTI_RES = 0.0,  0.0
+        extra_gfa_from_SINGLE_RES_conversion, gfa_to_MULTI_RES = 0.0, 0.0
         for building in buildings_to_MULTI_RES:
-            building_gfa = typology_status_quo.loc[building]['GFA_m2']
+            building_gfa = typology_statusquo.loc[building]['GFA_m2']
             gfa_to_MULTI_RES += building_gfa
-            extra_gfa = building_gfa - round(building_gfa*0.82/120)*60
+            extra_gfa = building_gfa - round(building_gfa * 0.82 / 120) * 60
             extra_gfa_from_SINGLE_RES_conversion += extra_gfa
-            typology_status_quo.loc[building, :] = typology_status_quo.loc[building].replace({"SINGLE_RES": "MULTI_RES"})
+            typology_statusquo.loc[building, :] = typology_statusquo.loc[building].replace({"SINGLE_RES": "MULTI_RES"})
         future_required_gfa_per_use["SINGLE_RES"] = future_required_gfa_per_use["SINGLE_RES"] - gfa_to_MULTI_RES
         additional_required_gfa_per_use["MULTI_RES"] = additional_required_gfa_per_use[
                                                            "MULTI_RES"] - extra_gfa_from_SINGLE_RES_conversion
         assert additional_required_gfa_per_use["MULTI_RES"] > 0.0
 
-    # calculate total_future_required_gfa # TODO: redundant?
+    # update future_required_gfa_per_use and target_per_use_gfa
     future_required_gfa_per_use = future_required_gfa_per_use.astype(int)
     future_required_gfa_per_use.to_csv(os.path.join(sample_data_dir(PARAMS), "future_required_gfa_per_use.csv"))
-    total_future_required_gfa = future_required_gfa_per_use.sum()
-
     target_per_use_gfa = additional_required_gfa_per_use.astype(int).to_dict()
 
     # FINALIZE INPUTS
     # filter out buildings by use
-    buildings_filtered_out_by_use, typology_untouched_uses = filter_buildings_by_uses(
-        typology_status_quo,
-        uses_untouched=[PARAMS["MULTI_RES_USE_TYPE"], "SINGLE_RES"], # FIXME: change to a list of uses unchanged for 2060
-    )
+    buildings_filtered_out_by_use, typology_untouched_uses = remove_buildings_by_uses(typology_statusquo,
+                                                                                      uses_to_remove=PARAMS[
+                                                                                          'USES_UNTOUCH'])  # FIXME: change to a list of uses unchanged for 2060
 
     # keep old buildings unchanged
     buildings_filtered_out_by_age = filter_buildings_by_year_sample_data(
@@ -212,6 +215,7 @@ def main():
     typology_df = scenarios[best_scenario].copy()
     # add back those buildings initially filtered out
     typology_df = typology_df.append(buildings_filtered_out_by_age, sort=True)
+    typology_df = typology_df.append(typology_planned, sort=True) 
     typology_df = typology_df.append(typology_untouched_uses, sort=True)
     amap.update_zone_shp_file(
         solution=optimizations[best_scenario]["solution"],
@@ -222,7 +226,7 @@ def main():
     )
     amap.update_typology_file(
         solution=optimizations[best_scenario]["solution"],
-        status_quo_typology=typology_status_quo,
+        status_quo_typology=typology_statusquo,
         optimized_typology=typology_df,
         building_to_sub_building=optimizations[best_scenario]["building_to_sub_building"],
         path_to_output_typology_file=sample_data_dir(PARAMS) / "typology_updated.dbf",
@@ -243,14 +247,12 @@ def calc_range_additional_floors_per_building(PARAMS, typology_status_quo):
     return range_additional_floors_per_building
 
 
-def get_planned_residential_area(PARAMS, current_gfa_per_use, gfa_ratio_per_use_type):
-    if PARAMS['MULTI_RES_USE_TYPE'] in current_gfa_per_use.index:
-        future_planned_res_gfa = current_gfa_per_use[PARAMS['MULTI_RES_USE_TYPE']]
-        current_gfa_per_use.drop(PARAMS['MULTI_RES_USE_TYPE'], inplace=True)
-        gfa_ratio_per_use_type.drop(PARAMS['MULTI_RES_USE_TYPE'], inplace=True)
-    else:
-        future_planned_res_gfa = 0.0
-    return current_gfa_per_use, gfa_ratio_per_use_type, future_planned_res_gfa
+def get_planned_res_gfa(PARAMS, gfa_per_use_statusquo):
+    future_planned_res_gfa = 0.0
+    if PARAMS['MULTI_RES_PLANNED'] in gfa_per_use_statusquo.index:
+        future_planned_res_gfa = gfa_per_use_statusquo[PARAMS['MULTI_RES_PLANNED']]
+        # gfa_per_use_statusquo.drop(PARAMS['MULTI_RES_USE_TYPE'], inplace=True)
+    return future_planned_res_gfa
 
 
 def sample_data_dir(PARAMS) -> Path:
@@ -295,14 +297,15 @@ def filter_buildings_by_year_sample_data(typology_merged: pd.DataFrame, year: in
     return typology_merged[op(typology_merged.YEAR, year)]
 
 
-def filter_buildings_by_uses(typology_merged: pd.DataFrame, uses_untouched: list):
-    typology_orig = typology_merged.copy()
-    orig_building_names = typology_orig.index
-    for use in uses_untouched:
-        typology_merged = typology_merged.drop(typology_merged[typology_merged["1ST_USE"] == use].index)
-    building_names_remained = typology_merged.index
-    typology_untouched_uses = typology_orig.loc[list(set(orig_building_names) - set(building_names_remained))]
-    return typology_merged, typology_untouched_uses
+def remove_buildings_by_uses(typology_df: pd.DataFrame, uses_to_remove: list):
+    typology_remained_df = typology_df.copy()
+    orig_building_names = typology_remained_df.index
+    for use in uses_to_remove:
+        typology_remained_df = typology_remained_df.drop(
+            typology_remained_df[typology_remained_df["1ST_USE"] == use].index)
+    building_names_remained = typology_remained_df.index
+    typology_removed_df = typology_df.loc[list(set(orig_building_names) - set(building_names_remained))]
+    return typology_remained_df, typology_removed_df
 
 
 def sample_data(PARAMS) -> pd.DataFrame:
@@ -365,22 +368,17 @@ def calc_gfa_per_use(typology_merged: pd.DataFrame):
             gfa_per_use_type[use] += val
 
     # get rid of the unwanted "NONE" use-type
-    del gfa_per_use_type["NONE"]
+    if "NONE" in gfa_per_use_type.keys():
+        del gfa_per_use_type["NONE"]
 
-    gfa_per_use_type = pd.Series(gfa_per_use_type)
-    gfa_ratio_per_use_type = gfa_per_use_type / gfa_per_use_type.sum()
-
-    return gfa_per_use_type, gfa_ratio_per_use_type
+    return pd.Series(gfa_per_use_type)
 
 
-def calc_future_required_residential_gfa(gfa_per_use_type, PARAMS):
+def calc_additional_requied_residential_gfa(PARAMS):
     future_required_additional_res_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
     future_required_additional_res_gfa = future_required_additional_res_living_space / PARAMS[
         'ratio_living_space_to_GFA']
-    future_required_res_gfa = (future_required_additional_res_gfa +
-                               gfa_per_use_type.SINGLE_RES + gfa_per_use_type.MULTI_RES)
-    # future_required_res_gfa = (future_required_additional_res_gfa + gfa_per_use_type.filter(like="_RES").sum()) # FIXME: drop MULTI_RES in gfa_per_use_type
-    return future_required_additional_res_gfa, future_required_res_gfa
+    return future_required_additional_res_gfa
 
 
 def remove_updated_files(PARAMS, clean=True):
