@@ -257,8 +257,7 @@ def update_typology_file(
                 simulated_typology.loc[building, use_col] = "NONE"
             if simulated_typology.loc[building, use_col] == 'MULTI_RES':
                 if updated_floors[use_col] > 0 or status_quo_typology.loc[building, use_col] == 'SINGLE_RES':
-                    simulated_typology.loc[building, use_col] = PARAMS[
-                        'MULTI_RES_USE_TYPE']  # FIXME: TAKE FROM INPUT
+                    simulated_typology.loc[building, use_col] = PARAMS['MULTI_RES_PLANNED']  # FIXME: TAKE FROM INPUT
         if not np.isclose(total_floors, sum(updated_floors.values())):
             raise ValueError("total number of floors mis-match excpeted number of floors")
     if path_to_output_typology_file.exists():
