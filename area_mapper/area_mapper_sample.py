@@ -28,7 +28,7 @@ def main():
     PARAMS = {
         # scenario-specific
         'path': r"C:\Users\shsieh\Nextcloud\VILLE\Case studies\Echallens\04062021_test_run_input_files\future_2040",
-        'additional_population': 2175,  # people, 7900 - 5725 # TODO: add population model to store the data
+        'additional_population': 2175,  # people
         'future_occupant_density': 50,  # living space m2/occupants
         'building_height_limit': 24,  # m
         'MULTI_RES_USE_TYPE': 'MULTI_RES_2040',
@@ -39,9 +39,10 @@ def main():
         'ratio_living_space_to_GFA': 0.82,
         'floor_height': 3,  # m
         'min_additional_floors': 0,
+        'scenario_count': 10
     }
 
-    with open(os.path.join(PARAMS['path'], 'PARAMS.json'), 'w') as fp:
+    with open(os.path.join(sample_data_dir(PARAMS), 'PARAMS.json'), 'w') as fp:
         json.dump(PARAMS, fp)
 
     remove_updated_files(PARAMS, clean=True)  # if True, cleans the output files in sample_data folder
@@ -57,10 +58,10 @@ def main():
     # get current status and future planned residential area
     current_gfa_per_use, gfa_ratio_per_use = calc_gfa_per_use(typology_status_quo)
     current_gfa_per_use.to_csv(os.path.join(sample_data_dir(PARAMS), "current_gfa_per_use_type.csv"))
-    # FIXME: below is a work-around to remove MULTI_RES_2040
+    # REMOVE FUTURE PLANNED AREA
     current_gfa_per_use, gfa_ratio_per_use, \
     future_planned_res_gfa = get_planned_residential_area(PARAMS, current_gfa_per_use, gfa_ratio_per_use)
-
+    # TODO: KEEP "FUTURE RESERVED AREA" TO BUILD MULTI_RES
     ## SET TARGET GFA RATIOS # FIXME: get from files
     relative_gfa_ratio_to_res = (gfa_ratio_per_use
                                  / (gfa_ratio_per_use.SINGLE_RES + gfa_ratio_per_use.MULTI_RES))  # 2020
@@ -70,8 +71,8 @@ def main():
     future_required_res_gfa = calc_future_required_residential_gfa(current_gfa_per_use, PARAMS)
     future_required_gfa_dict = dict()
     for use_type in relative_gfa_ratio_to_res.index:
-        if use_type == "SINGLE_RES":
-            future_required_gfa_dict[use_type] = current_gfa_per_use[use_type]  # TODO: update if convert SFH to MFH
+        if use_type == "SINGLE_RES" or use_type == "MULTI_RES_2040": # FIXME: add residential kept unchanged to input
+            future_required_gfa_dict[use_type] = current_gfa_per_use[use_type]
         elif use_type == "MULTI_RES":
             future_required_gfa_dict[use_type] = future_required_additional_res_gfa + current_gfa_per_use[use_type]
         else:
@@ -110,7 +111,7 @@ def main():
     # filter out buildings by use
     buildings_filtered_out_by_use, typology_untouched_uses = filter_buildings_by_uses(
         typology_status_quo,
-        uses_untouched=[PARAMS["MULTI_RES_USE_TYPE"], "SINGLE_RES"],
+        uses_untouched=[PARAMS["MULTI_RES_USE_TYPE"], "SINGLE_RES"], # FIXME: change to a list of uses unchanged for 2060
     )
 
     # keep old buildings unchanged
@@ -134,7 +135,7 @@ def main():
         typology_merged=buildings_kept,
         mapping=sample_mapping(),
         use_columns=typology_use_columns(),
-        scenario_count=10,
+        scenario_count=PARAMS['scenario_count'],
     )
 
     # built area allocation for all scenarios
@@ -244,9 +245,9 @@ def calc_range_additional_floors_per_building(PARAMS, typology_status_quo):
 
 def get_planned_residential_area(PARAMS, current_gfa_per_use, gfa_ratio_per_use_type):
     if PARAMS['MULTI_RES_USE_TYPE'] in current_gfa_per_use.index:
-        future_planned_res_gfa = current_gfa_per_use["MULTI_RES_2040"]
-        current_gfa_per_use.drop("MULTI_RES_2040", inplace=True)
-        gfa_ratio_per_use_type.drop("MULTI_RES_2040", inplace=True)
+        future_planned_res_gfa = current_gfa_per_use[PARAMS['MULTI_RES_USE_TYPE']]
+        current_gfa_per_use.drop(PARAMS['MULTI_RES_USE_TYPE'], inplace=True)
+        gfa_ratio_per_use_type.drop(PARAMS['MULTI_RES_USE_TYPE'], inplace=True)
     else:
         future_planned_res_gfa = 0.0
     return current_gfa_per_use, gfa_ratio_per_use_type, future_planned_res_gfa
@@ -378,6 +379,7 @@ def calc_future_required_residential_gfa(gfa_per_use_type, PARAMS):
         'ratio_living_space_to_GFA']
     future_required_res_gfa = (future_required_additional_res_gfa +
                                gfa_per_use_type.SINGLE_RES + gfa_per_use_type.MULTI_RES)
+    # future_required_res_gfa = (future_required_additional_res_gfa + gfa_per_use_type.filter(like="_RES").sum()) # FIXME: drop MULTI_RES in gfa_per_use_type
     return future_required_additional_res_gfa, future_required_res_gfa
 
 
