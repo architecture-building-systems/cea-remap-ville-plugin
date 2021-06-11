@@ -23,7 +23,7 @@ def main():
         prop_geometry = get_prop_geometry(path_to_zone_shp, path_to_architecture)
         typology = dbf_to_dataframe(path_to_typology).set_index('Name', drop=False)
         typology_merged = typology.merge(prop_geometry, left_index=True, right_on='Name')
-        gfa_per_use_type, gfa_ratio_per_use_type = calc_gfa_per_use(typology_merged)
+        gfa_per_use_type = calc_gfa_per_use(typology_merged)
         gfa_per_use_dict[scenario] = gfa_per_use_type
 
     print(pd.DataFrame(gfa_per_use_dict))
