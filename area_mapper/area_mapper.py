@@ -20,6 +20,26 @@ import pulp
 import pandas as pd
 import numpy as np
 
+incopetibale_use_types = {
+    "COOLROOM": ["SINGLE_RES"],
+    "FOODSTORE": ["SINGLE_RES"],
+    "GYM": ["SINGLE_RES"],
+    "HOTEL": ["SCHOOL", "SINGLE_RES"],
+    "HOSPITAL": ["MULTI_RES", "INDUSTRIAL", "SCHOOL", "SINGLE_RES"],
+    "INDUSTRIAL": ["MULTI_RES", "HOSPITAL", "SCHOOL", "LIBRARY", "MUSEUM", "UNIVERSITY", "SINGLE_RES"],
+    "LIBRARY": ["INDUSTRIAL", "SINGLE_RES"],
+    "MULTI_RES": ["INDUSTRIAL", "SERVERROOM", "SWIMMING", "UNIVERSITY", "COOLROOM", "MUSEUM", "SCHOOL",
+                  "HOSPITAL", "SINGLE_RES"],
+    "MUSEUM": ["INDUSTRIAL", "SINGLE_RES"],
+    "OFFICE": ["SINGLE_RES"],
+    "RETAIL": ["SINGLE_RES"],
+    "RESTAURANT": ["SINGLE_RES"],
+    "SCHOOL": ["INDUSTRIAL", "HOSPITAL", "HOTEL", "FOODSTORE", "RETAIL", "RESTAURANT", "MULTI_RES", "SINGLE_RES"],
+    "SERVERROOM": ["MULTI_RES", "SINGLE_RES"],
+    "SWIMMING": ["SINGLE_RES"],
+    "UNIVERSITY": ["SINGLE_RES"],
+}
+
 
 def randomize(
         data_frame: pd.DataFrame,
@@ -38,7 +58,14 @@ def randomize(
     for i, row in free_uses.iterrows():
         how_many_free_uses = row.sum()
         current_uses = data_frame_copy.loc[i, use_columns][~row].values
-        choices = list(set(mapping[data_frame_copy.at[i, city_zone_name]]).difference(set(current_uses)))
+        # get available uses
+        available_uses_cityzone = set(mapping[data_frame_copy.at[i, city_zone_name]])
+        not_available_uses_building = []
+        for use in current_uses:
+            if use in incopetibale_use_types.keys():
+                not_available_uses_building.extend(incopetibale_use_types[use])
+        available_uses_building = available_uses_cityzone.difference(set(not_available_uses_building))
+        choices = list(available_uses_building.difference(set(current_uses)))
         additional = generator.choice(choices, size=how_many_free_uses, replace=False)
         mask = additional == "NONE"
         if mask.sum() == 2:  # both empty uses
@@ -109,24 +136,27 @@ def detailed_result_metrics(
 ) -> NoReturn:
     result_add_floors = parse_milp_solution(solution)
     result_add_gfa_per_use = {k: 0 for k in set(sub_building_use.values())}
-    for v in result_add_floors:
-        result_add_gfa_per_use[sub_building_use[v]] += sub_footprint_area[v] * result_add_floors[v]
-
-    # checks
-    abs_error, rel_error = calculate_result_metrics(solution, target, sub_footprint_area)
-
     metrics = dict()
-    for use in result_add_gfa_per_use:
-        print("use [%s] actual [%.1f] vs. target [%.1f]" % (use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
-        use_abs_error = abs(target_add_gfa_per_use[use] - result_add_gfa_per_use[use])
-        try:
-            use_rel_error = use_abs_error / target_add_gfa_per_use[use]
-        except ZeroDivisionError as e:
-            use_rel_error = 0.0
-        print("    abs. error [%.1f]\n    rel. error [%.4f]" % (use_abs_error, use_rel_error))
-        metrics[use] = {"result": int(result_add_gfa_per_use[use]),
-                        "target": int(target_add_gfa_per_use[use])}
-
+    if result_add_floors:
+        # additional floors per use
+        for v in result_add_floors:
+            result_add_gfa_per_use[sub_building_use[v]] += sub_footprint_area[v] * result_add_floors[v]
+        # calculate errors
+        abs_error, rel_error = calculate_result_metrics(solution, target, sub_footprint_area)
+        for use in result_add_gfa_per_use:
+            print("use [%s] actual [%.1f] vs. target [%.1f]" % (
+            use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
+            use_abs_error = abs(target_add_gfa_per_use[use] - result_add_gfa_per_use[use])
+            try:
+                use_rel_error = use_abs_error / target_add_gfa_per_use[use]
+            except ZeroDivisionError as e:
+                use_rel_error = 0.0
+            print("    abs. error [%.1f]\n    rel. error [%.4f]" % (use_abs_error, use_rel_error))
+            metrics[use] = {"result": int(result_add_gfa_per_use[use]),
+                            "target": int(target_add_gfa_per_use[use])}
+    else:
+        abs_error = 1e20
+        rel_error = 1e20
     return {"gfa_per_use": pd.DataFrame(metrics), "absolute_error": abs_error, "relative_error": rel_error}
 
 
@@ -136,11 +166,16 @@ def calculate_result_metrics(
         sub_footprint_area: Dict[str, float]
 ) -> Tuple[float, float]:
     result_additional_floors = parse_milp_solution(solution)
-    result_additioanl_gfa = sum(sub_footprint_area[v] * result_additional_floors[v] for v in result_additional_floors)
-    abs_error = abs(total_addtitional_gfa_target - result_additioanl_gfa)
-    rel_error = abs_error / total_addtitional_gfa_target
-    print("compare total target [%.1f] vs. actual [%.1f]" % (total_addtitional_gfa_target, result_additioanl_gfa))
-    print("total absolute error [%.1f], relative error [%.4f]" % (abs_error, rel_error))
+    if result_additional_floors:
+        result_additioanl_gfa = sum(
+            sub_footprint_area[v] * result_additional_floors[v] for v in result_additional_floors)
+        abs_error = abs(total_addtitional_gfa_target - result_additioanl_gfa)
+        rel_error = abs_error / total_addtitional_gfa_target
+        print("compare total target [%.1f] vs. actual [%.1f]" % (total_addtitional_gfa_target, result_additioanl_gfa))
+        print("total absolute error [%.1f], relative error [%.4f]" % (abs_error, rel_error))
+    else:
+        abs_error = 1e20
+        rel_error = 1e20
     return abs_error, rel_error
 
 
@@ -151,7 +186,7 @@ def find_optimum_scenario(
     errors = dict()
     minimum = None
     for i, optimization in enumerate(optimizations):
-        print('scenario %i'% i)
+        print('scenario %i' % i)
         if minimum is None:
             minimum = i
         abs_error, rel_error = calculate_result_metrics(
@@ -205,7 +240,6 @@ def update_zone_shp_file(
         typology_merged.loc[b, "floors_ag_updated"] = typology_merged.floors_ag[b] + floors_ag_updated[b]
         typology_merged.loc[b, "height_ag_updated"] = typology_merged.height_ag[b] + height_ag_updated[b]
 
-
     if path_to_input_zone_shape_file.exists():
         zone_shp_updated = GeoDataFrame.from_file(str(path_to_input_zone_shape_file.absolute()))
     else:
@@ -224,7 +258,6 @@ def update_zone_shp_file(
         result_add_gfa_per_use[sub_building_use[v]] += sub_footprint_area[v] * result_add_floors[v]
         total_add_area += sub_footprint_area[v] * result_add_floors[v]
 
-    calculated_additional_gfa = (zone_shp_updated['floors_ag']-typology_merged['floors_ag'])*zone_shp_updated.area
     calculated_additional_gfa = (zone_shp_updated['floors_ag'] - typology_merged['floors_ag']) * zone_shp_updated.area
 
     if path_to_output_zone_shape_file.exists():
@@ -234,59 +267,16 @@ def update_zone_shp_file(
 
 
 def parse_milp_solution(solution: pulp.LpProblem) -> Dict[str, int]:
-    return {v.name.split("_")[1]: int(v.varValue) for v in solution.variables()}
-
-
-def update_typology_file(
-        solution: pulp.LpProblem,
-        status_quo_typology: pd.DataFrame,
-        optimized_typology: pd.DataFrame,
-        building_to_sub_building: Dict[str, List[str]],
-        path_to_output_typology_file: Path,
-        columns_to_keep: List[Tuple],
-        PARAMS
-) -> NoReturn:
-    """
-    updates use ratios: updated_use_ratio = updated_number_of_floors_use_type_X/updated_total_number_of_floors, where:
-    number_of_floors_use_type_X = additional_floors_use_type_X + initial_use_ratio_X * initial_total_number_of_floors
-    """
-    status_quo_typology = status_quo_typology.copy()
-    simulated_typology = optimized_typology.copy()
-    simulated_typology["1ST_USE_R"] = simulated_typology["1ST_USE_R"].astype(float)
-    simulated_typology["2ND_USE_R"] = simulated_typology["2ND_USE_R"].astype(float)
-    simulated_typology["3RD_USE_R"] = simulated_typology["3RD_USE_R"].astype(float)
-    simulated_typology["REFERENCE"] = "after-optimization"
-
-    use_col_dict = {i: column for i, column in enumerate(["1ST_USE", "2ND_USE", "3RD_USE"])}
-    result = parse_milp_solution(solution)
-    for building, sub_buildings in building_to_sub_building.items():
-        updated_floors = dict()
-        current_floors = status_quo_typology.loc[building, "floors_ag"]
-        total_additional_floors = sum([result[y] for y in sub_buildings])
-        total_floors = current_floors + total_additional_floors
-        for i, sub_building in enumerate(sub_buildings):
-            sub_building_additional_floors = result[sub_building]
-            current_ratio = status_quo_typology.loc[building, use_col_dict[i] + '_R']
-            updated_floors[use_col_dict[i]] = (sub_building_additional_floors + (current_ratio * current_floors))
-        for use_col in updated_floors:
-            r = updated_floors[use_col] / total_floors
-            simulated_typology.loc[building, use_col + '_R'] = r
-            if np.isclose(r, 0.0):
-                simulated_typology.loc[building, use_col] = "NONE"
-            if simulated_typology.loc[building, use_col] == 'MULTI_RES':
-                if updated_floors[use_col] > 0 or status_quo_typology.loc[building, use_col] == 'SINGLE_RES':
-                    simulated_typology.loc[building, use_col] = PARAMS['MULTI_RES_PLANNED']  # FIXME: TAKE FROM INPUT
-        if not np.isclose(total_floors, sum(updated_floors.values())):
-            raise ValueError("total number of floors mis-match excpeted number of floors")
-    if path_to_output_typology_file.exists():
-        raise IOError("output typology_updated.dbf file [%s] already exists" % path_to_output_typology_file)
+    results = None
+    none_list = 0
+    for v in solution.variables():  # check if all outputs are valid
+        if v.varValue is None:
+            none_list += 1
+    if none_list <= 0:
+        results = {v.name.split("_")[1]: int(v.varValue) for v in solution.variables()}
     else:
-        output = simulated_typology.copy()
-        keep = list()
-        for column, column_type in columns_to_keep:
-            keep.append(column)
-            output[column] = output[column].astype(column_type)
-        dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
+        print("no result\n")
+    return results
 
 
 def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
@@ -295,7 +285,7 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
     simulated_typology = best_typology_df.copy()
 
     zone_updated_gfa_per_building = zone_shp_updated.area * (
-                zone_shp_updated['floors_ag'] + zone_shp_updated['floors_bg'])
+            zone_shp_updated['floors_ag'] + zone_shp_updated['floors_bg'])
 
     simulated_typology["1ST_USE_R"] = simulated_typology["1ST_USE_R"].astype(float)
     simulated_typology["2ND_USE_R"] = simulated_typology["2ND_USE_R"].astype(float)
@@ -327,6 +317,7 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
             if simulated_typology.loc[b, use_col] == 'MULTI_RES':
                 if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
                     simulated_typology.loc[b, use_col] = PARAMS['MULTI_RES_PLANNED']
+                    simulated_typology.loc[b, "STANDARD"] = "STANDARD5" # TODO: get from input
     save_updated_typology(path_to_output_typology_file, simulated_typology)
 
 
