@@ -42,7 +42,7 @@ def main():
         'ratio_living_space_to_GFA': 0.82,
         'floor_height': 3,  # m
         'min_additional_floors': 0,
-        'scenario_count': 2
+        'scenario_count': 10
     }
 
     with open(os.path.join(sample_data_dir(PARAMS), 'PARAMS.json'), 'w') as fp:
@@ -270,18 +270,25 @@ def combine_statusquo_MULTI_RES_gfa(gfa_per_use_statusquo):
 
 
 def calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, scenario):
+    """
+    1. read target ratio
+    2. update rel_ratio_to_res_gfa for use that exists but not specified in target
+    :param gfa_per_use_statusquo: in m2
+    :param scenario: urban development scenario
+    :return:
+    """
     gfa_per_use_statusquo_in = gfa_per_use_statusquo.copy()
     if scenario == 'SQ':
         rel_ratio_to_res_gfa_target = (gfa_per_use_statusquo / gfa_per_use_statusquo.filter(like='_RES').sum())
     else:
-        target_ratios = read_mapping('SURB', '2040', scenario)
-        # unify columns in target_ratios and gfa_per_use_statusquo
-        zero_series = pd.DataFrame(0.0, index=range(1), columns=target_ratios.index).loc[0]
+        # read target ratio
+        rel_ratio_to_res_gfa_target = read_mapping('SURB', '2040', scenario)
+        # unify columns in target_rel_ratios and gfa_per_use_statusquo
+        zero_series = pd.DataFrame(0.0, index=range(1), columns=rel_ratio_to_res_gfa_target.index).loc[0]
         gfa_per_use_statusquo = zero_series.combine(gfa_per_use_statusquo, max)
-        # get target rel_ratios
         rel_ratio_to_res_gfa_statusquo = (gfa_per_use_statusquo / gfa_per_use_statusquo.filter(like='_RES').sum())
-        rel_ratio_to_res_gfa_target = zero_series.copy()
-        for use, target_val in target_ratios.items():
+        # update rel_ratio_to_res_gfa for use that exists but not specified in target
+        for use, target_val in rel_ratio_to_res_gfa_target.items():
             if np.isclose(target_val, 0.0) and rel_ratio_to_res_gfa_statusquo[use] > 0:
                 # if not required in target, keep existing uses in status quo
                 rel_ratio_to_res_gfa_target[use] = rel_ratio_to_res_gfa_statusquo[use]
