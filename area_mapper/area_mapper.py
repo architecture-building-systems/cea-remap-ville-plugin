@@ -188,17 +188,23 @@ def update_zone_shp_file(
         building_to_sub_building: Dict[str, List[str]],
         path_to_input_zone_shape_file: Path,
         path_to_output_zone_shape_file: Path,
+        sub_footprint_area,
+        sub_building_use
 ):
     """updates floors_ag and height_ag in zone.shp"""
+
     floors_ag_updated = defaultdict(int)
     height_ag_updated = defaultdict(int)
     result = parse_milp_solution(solution)
+    building_additional_gfa = defaultdict(int)
     for b, sb in building_to_sub_building.items():
         floors_ag_updated[b] = sum([result[_sb] for _sb in sb])
+        building_additional_gfa[b] = [typology_merged.footprint[b] * floors_ag_updated[b]]
         height_ag_updated[b] = floors_ag_updated[b] * 3
         typology_merged.loc[b, "additional_floors"] = floors_ag_updated[b]
         typology_merged.loc[b, "floors_ag_updated"] = typology_merged.floors_ag[b] + floors_ag_updated[b]
         typology_merged.loc[b, "height_ag_updated"] = typology_merged.height_ag[b] + height_ag_updated[b]
+
 
     if path_to_input_zone_shape_file.exists():
         zone_shp_updated = GeoDataFrame.from_file(str(path_to_input_zone_shape_file.absolute()))
@@ -209,6 +215,17 @@ def update_zone_shp_file(
     zone_shp_updated["floors_ag"] = typology_merged["floors_ag_updated"]
     zone_shp_updated["height_ag"] = typology_merged["height_ag_updated"]
     zone_shp_updated["REFERENCE"] = "after-optimization"
+
+    # check
+    result_add_floors = parse_milp_solution(solution)
+    result_add_gfa_per_use = {k: 0 for k in set(sub_building_use.values())}
+    total_add_area = 0.0
+    for v in result_add_floors:
+        result_add_gfa_per_use[sub_building_use[v]] += sub_footprint_area[v] * result_add_floors[v]
+        total_add_area += sub_footprint_area[v] * result_add_floors[v]
+
+    calculated_additional_gfa = (zone_shp_updated['floors_ag']-typology_merged['floors_ag'])*zone_shp_updated.area
+    calculated_additional_gfa = (zone_shp_updated['floors_ag'] - typology_merged['floors_ag']) * zone_shp_updated.area
 
     if path_to_output_zone_shape_file.exists():
         raise IOError("output zone.shp file [%s] already exists" % path_to_output_zone_shape_file)
@@ -270,3 +287,91 @@ def update_typology_file(
             keep.append(column)
             output[column] = output[column].astype(column_type)
         dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
+
+
+def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
+                        zone_shp_updated, floors_ag_updated, path_to_output_typology_file, PARAMS):
+    status_quo_typology = typology_statusquo.copy()
+    simulated_typology = best_typology_df.copy()
+
+    zone_updated_gfa_per_building = zone_shp_updated.area * (
+                zone_shp_updated['floors_ag'] + zone_shp_updated['floors_bg'])
+
+    simulated_typology["1ST_USE_R"] = simulated_typology["1ST_USE_R"].astype(float)
+    simulated_typology["2ND_USE_R"] = simulated_typology["2ND_USE_R"].astype(float)
+    simulated_typology["3RD_USE_R"] = simulated_typology["3RD_USE_R"].astype(float)
+    simulated_typology["REFERENCE"] = "after-optimization"
+    use_col_dict = {i: column for i, column in enumerate(["1ST_USE", "2ND_USE", "3RD_USE"])}
+    for b, sb in building_to_sub_building.items():
+        updated_floor_per_use_col = dict()
+        current_floors = status_quo_typology.loc[b, "floors_ag"] + status_quo_typology.loc[b, "floors_bg"]
+        total_additional_floors = sum([result_add_floors[y] for y in sb])
+        assert np.isclose(total_additional_floors, floors_ag_updated[b])
+        updated_floors = current_floors + total_additional_floors
+        total_gfa = updated_floors * status_quo_typology.footprint[b]
+        assert np.isclose(zone_updated_gfa_per_building.loc[b], total_gfa)
+        # get updated_floor_per_use_col
+        for i, sub_building in enumerate(sb):
+            sub_building_additional_floors = result_add_floors[sub_building]
+            current_ratio = status_quo_typology.loc[b, use_col_dict[i] + '_R']
+            updated_floor_per_use_col[use_col_dict[i]] = (
+                    sub_building_additional_floors + (current_ratio * current_floors))
+        if not np.isclose(updated_floors, sum(updated_floor_per_use_col.values())):
+            raise ValueError("total number of floors mis-match excpeted number of floors")
+        # write update ratio
+        for use_col in updated_floor_per_use_col:
+            r = updated_floor_per_use_col[use_col] / updated_floors
+            simulated_typology.loc[b, use_col + '_R'] = r
+            if np.isclose(r, 0.0):
+                simulated_typology.loc[b, use_col] = "NONE"
+            if simulated_typology.loc[b, use_col] == 'MULTI_RES':
+                if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
+                    simulated_typology.loc[b, use_col] = PARAMS['MULTI_RES_PLANNED']
+    save_updated_typology(path_to_output_typology_file, simulated_typology)
+
+
+def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_building, path_to_input_zone_shape_file,
+                    path_to_output_zone_shape_file):
+    # update floors_ag and height_ag
+    floors_ag_updated, height_ag_updated = defaultdict(int), defaultdict(int)
+    for b, sb in building_to_sub_building.items():
+        floors_ag_updated[b] = sum([result_add_floors[_sb] for _sb in sb])
+        height_ag_updated[b] = floors_ag_updated[b] * 3
+        best_typology_df.loc[b, "additional_floors"] = floors_ag_updated[b]
+        best_typology_df.loc[b, "floors_ag_updated"] = best_typology_df.floors_ag[b] + floors_ag_updated[b]
+        best_typology_df.loc[b, "height_ag_updated"] = best_typology_df.height_ag[b] + height_ag_updated[b]
+    # save zone_shp_updated
+    zone_shp_updated = save_updated_zone_shp(best_typology_df, path_to_input_zone_shape_file,
+                                             path_to_output_zone_shape_file)
+    return floors_ag_updated, zone_shp_updated
+
+
+def save_updated_typology(path_to_output_typology_file, simulated_typology):
+    if path_to_output_typology_file.exists():
+        raise IOError("output typology_updated.dbf file [%s] already exists" % path_to_output_typology_file)
+    else:
+        output = simulated_typology.copy()
+        keep = list()
+        columns_to_keep = [("Name", str), ("YEAR", int), ("STANDARD", str), ("1ST_USE", str), ("1ST_USE_R", float),
+                           ("2ND_USE", str), ("2ND_USE_R", float), ("3RD_USE", str), ("3RD_USE_R", float),
+                           ("REFERENCE", str)]
+        for column, column_type in columns_to_keep:
+            keep.append(column)
+            output[column] = output[column].astype(column_type)
+        dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
+
+
+def save_updated_zone_shp(best_typology_df, path_to_input_zone_shape_file, path_to_output_zone_shape_file):
+    if path_to_input_zone_shape_file.exists():
+        zone_shp_updated = GeoDataFrame.from_file(str(path_to_input_zone_shape_file))
+    else:
+        raise IOError("input zone.shp file [%s] does not exist" % path_to_input_zone_shape_file)
+    zone_shp_updated = zone_shp_updated.set_index("Name")
+    zone_shp_updated["floors_ag"] = best_typology_df["floors_ag_updated"]
+    zone_shp_updated["height_ag"] = best_typology_df["height_ag_updated"]
+    zone_shp_updated["REFERENCE"] = "after-optimization"
+    if path_to_output_zone_shape_file.exists():
+        raise IOError("output zone.shp file [%s] already exists" % path_to_output_zone_shape_file)
+    else:
+        zone_shp_updated.to_file(path_to_output_zone_shape_file)
+    return zone_shp_updated
