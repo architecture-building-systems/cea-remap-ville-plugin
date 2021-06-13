@@ -104,43 +104,43 @@ def detailed_result_metrics(
         solution: pulp.LpProblem,
         sub_building_use: Dict,
         sub_footprint_area: Dict,
-        per_use_gfa: Dict,
+        target_add_gfa_per_use: Dict,
         target: float
 ) -> NoReturn:
-    result = parse_milp_solution(solution)
-    actual_use = {k: 0 for k in set(sub_building_use.values())}
-    for v in result:
-        actual_use[sub_building_use[v]] += sub_footprint_area[v] * result[v]
+    result_add_floors = parse_milp_solution(solution)
+    result_add_gfa_per_use = {k: 0 for k in set(sub_building_use.values())}
+    for v in result_add_floors:
+        result_add_gfa_per_use[sub_building_use[v]] += sub_footprint_area[v] * result_add_floors[v]
 
     # checks
     abs_error, rel_error = calculate_result_metrics(solution, target, sub_footprint_area)
-    print("compare target [%.1f] vs. actual [%.1f]" % (target, sum(sub_footprint_area[v] * result[v] for v in result)))
-    print("absolute error [%.4f]" % abs_error)
-    print("relative error [%.8f]" % rel_error)
 
     metrics = dict()
-    for use in actual_use:
-        print("use [%s] actual [%.2f] vs. target [%.2f]" % (use, actual_use[use], per_use_gfa[use]))
-        abs_error = abs(per_use_gfa[use] - actual_use[use])
+    for use in result_add_gfa_per_use:
+        print("use [%s] actual [%.1f] vs. target [%.1f]" % (use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
+        use_abs_error = abs(target_add_gfa_per_use[use] - result_add_gfa_per_use[use])
         try:
-            rel_error = abs_error / per_use_gfa[use]
+            use_rel_error = use_abs_error / target_add_gfa_per_use[use]
         except ZeroDivisionError as e:
-            rel_error = 0.0
-        print("abs. error [%.4f]" % abs_error)
-        print("rel. error [%.8f]" % rel_error)
-        metrics[use] = {"actual_use": actual_use[use], "per_use_gfa": per_use_gfa[use]}
+            use_rel_error = 0.0
+        print("    abs. error [%.1f]\n    rel. error [%.4f]" % (use_abs_error, use_rel_error))
+        metrics[use] = {"result": int(result_add_gfa_per_use[use]),
+                        "target": int(target_add_gfa_per_use[use])}
 
-    return {"detailed_metrics": metrics, "absolute_error": abs_error, "relative_error": rel_error}
+    return {"gfa_per_use": pd.DataFrame(metrics), "absolute_error": abs_error, "relative_error": rel_error}
 
 
 def calculate_result_metrics(
         solution: pulp.LpProblem,
-        target: float,
+        total_addtitional_gfa_target: float,
         sub_footprint_area: Dict[str, float]
 ) -> Tuple[float, float]:
-    res = parse_milp_solution(solution)
-    abs_error = abs(target - sum(sub_footprint_area[v] * res[v] for v in res))
-    rel_error = abs_error / target
+    result_additional_floors = parse_milp_solution(solution)
+    result_additioanl_gfa = sum(sub_footprint_area[v] * result_additional_floors[v] for v in result_additional_floors)
+    abs_error = abs(total_addtitional_gfa_target - result_additioanl_gfa)
+    rel_error = abs_error / total_addtitional_gfa_target
+    print("compare total target [%.1f] vs. actual [%.1f]" % (total_addtitional_gfa_target, result_additioanl_gfa))
+    print("total absolute error [%.1f], relative error [%.4f]" % (abs_error, rel_error))
     return abs_error, rel_error
 
 
@@ -151,6 +151,7 @@ def find_optimum_scenario(
     errors = dict()
     minimum = None
     for i, optimization in enumerate(optimizations):
+        print('scenario %i'% i)
         if minimum is None:
             minimum = i
         abs_error, rel_error = calculate_result_metrics(
@@ -161,7 +162,7 @@ def find_optimum_scenario(
         errors[i] = abs_error
         if errors[minimum] > abs_error:
             minimum = i
-
+    print("best scenario: [%i] with absolute error [%.1f]" % (minimum, errors[minimum]))
     return minimum, errors
 
 
