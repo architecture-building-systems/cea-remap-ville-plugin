@@ -317,7 +317,7 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
             if simulated_typology.loc[b, use_col] == 'MULTI_RES':
                 if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
                     simulated_typology.loc[b, use_col] = PARAMS['MULTI_RES_PLANNED']
-                    simulated_typology.loc[b, "STANDARD"] = "STANDARD5" # TODO: get from input
+                    # simulated_typology.loc[b, "STANDARD"] = "STANDARD5" # TODO: get from input
     save_updated_typology(path_to_output_typology_file, simulated_typology)
 
 

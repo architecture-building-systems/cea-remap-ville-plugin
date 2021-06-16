@@ -27,17 +27,17 @@ from cea.demand.building_properties import calc_useful_areas
 def main():
     PARAMS = {
         # scenario-specific
-        'path': r"C:\Users\shsieh\Nextcloud\VILLE\Case studies\Echallens\04062021_test_run_input_files\future_2040",
-        'additional_population': 2175,  # people
-        'future_occupant_density': 50,  # living space m2/occupants
+        'path': r"C:\Users\shsieh\Nextcloud\VILLE\Case studies\Echallens\15062021-prep-inputs\2040_area_mapper\area_mapper",
+        'additional_population': 2649,  # people
+        'future_occupant_density': 60,  # living space m2/occupants
         'current_SFH_occupant_density': 120,  # living space m2/occupants
-        'UD_scenario': 'BAL',  # SQ, DCL, BAL
-        'building_height_limit': 24,  # m
+        'UD_scenario': 'DCL',  # SQ, DCL, BAL
+        'building_height_limit': 36,  # m
         'MULTI_RES_PLANNED': 'MULTI_RES_2040',
         'USES_UNTOUCH': ['SINGLE_RES'],
         'preserve_buildings_built_before': 1920,
         'SINGLE_to_MULTI_RES_ratio': 0.0,
-        'max_additional_floors': 10,
+        'max_additional_floors': 36,
         # constants
         'ratio_living_space_to_GFA': 0.82,
         'floor_height': 3,  # m
@@ -45,7 +45,7 @@ def main():
         'scenario_count': 10
     }
 
-    with open(os.path.join(sample_data_dir(PARAMS), 'PARAMS.json'), 'w') as fp:
+    with open(os.path.join(sample_data_dir(PARAMS), PARAMS["UD_scenario"]+'_PARAMS.json'), 'w') as fp:
         json.dump(PARAMS, fp)
 
     remove_updated_files(PARAMS, clean=True)  # if True, cleans the output files in sample_data folder
@@ -194,7 +194,7 @@ def main():
             "sub_footprint_area": sub_footprint_area,
             "building_to_sub_building": building_to_sub_building
         }
-        print("scenario [%i] is-success (if 1): [%i]" % (scenario, solution.sol_status))
+        print("\n scenario [%i] is-success (if 1): [%i]" % (scenario, solution.sol_status))
 
         detailed_metrics = amap.detailed_result_metrics(
             solution=solution,
@@ -206,6 +206,7 @@ def main():
         metrics[scenario] = detailed_metrics
 
     # find the best scenario
+    print("getting the best scenario...")
     best_scenario, scenario_errors = amap.find_optimum_scenario(
         optimizations=optimizations,
         target=total_additional_gfa_target
@@ -233,6 +234,7 @@ def main():
     overview['gfa_per_use_updated'] = gfa_per_use_type_updated.astype(int)
     overview['gfa_per_ratio_updated'] = round(gfa_per_use_type_updated / gfa_per_use_type_updated.sum(), 5)
     overview['actual_add_gfa_per_use'] = overview['gfa_per_use_updated'] - overview['gfa_per_use_statusquo']
+    overview['diff_add_gfa_per_use'] = overview['target_add_gfa_per_use'] - overview['actual_add_gfa_per_use']
     overview_df = pd.DataFrame(overview)
     overview_df.to_csv(os.path.join(sample_data_dir(PARAMS), PARAMS["UD_scenario"] + "_overview.csv"))
 
@@ -319,7 +321,7 @@ def get_planned_res_gfa(PARAMS, gfa_per_use_statusquo):
 
 
 def sample_data_dir(PARAMS) -> Path:
-    p = Path(os.path.join(PARAMS['path'], 'area_mapper\sample_data'))
+    p = Path(os.path.join(PARAMS['path']))
     if not p.exists():
         raise IOError("data_dir not found [%s]" % p)
     return p
