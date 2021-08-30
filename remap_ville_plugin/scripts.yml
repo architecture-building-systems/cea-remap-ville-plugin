@@ -41,3 +41,14 @@ ReMaP / Ville:
                "remap-ville-scenarios:year"]
   input-files:
   - [get_building_typology]
+
+- name: setup-new-scenario
+  label: Set up new scenario
+  description: Set up a new scenario based on an old scenario
+  interfaces: [cli]
+  module: remap_ville_plugin.remap_setup_scenario
+  parameters: ["general:scenario", "remap-ville-scenarios:district-archetype",
+               "remap-ville-scenarios:urban-development-scenario",
+               "remap-ville-scenarios:year"]
+  input-files:
+  - [get_building_typology]
