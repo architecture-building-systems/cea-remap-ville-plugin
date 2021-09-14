@@ -4,6 +4,7 @@ Initialize a new scenario based on a old scenario.
 import pandas as pd
 import numpy as np
 import os
+import json
 import random
 import operator
 import geopandas as gpd
@@ -28,11 +29,11 @@ __status__ = "Production"
 
 PARAMS = {
     'MULTI_RES_PLANNED': 'MULTI_RES_2040',
-    'additional_population': 6000,  # people
+    'additional_population': 3735,  # people
     'current_SFH_occupant_density': 150,  # living space m2/occupants # FIXME: read from input scenario
-    'future_occupant_density': 35,  # living space m2/occupants # FIXME: get from CH_ReMaP
+    'future_occupant_density': 45,  # living space m2/occupants # FIXME: get from CH_ReMaP
     'USES_UNTOUCH': ['SINGLE_RES'],
-    'SINGLE_to_MULTI_RES_ratio': 0.01,
+    'SINGLE_to_MULTI_RES_ratio': 0.0,
     'preserve_buildings_built_before': 1920,
     'building_height_limit': 80,  # m
     # constants
@@ -40,7 +41,7 @@ PARAMS = {
     'floor_height': 3,  # m
     'min_additional_floors': 0,
     'max_additional_floors': 80,
-    'scenario_count': 2  # FIXME: advanced config parameter
+    'scenario_count': 10  # FIXME: advanced config parameter
 }
 
 
@@ -48,8 +49,11 @@ def main(config):
     district_archetype = config.remap_ville_scenarios.district_archetype
     year = config.remap_ville_scenarios.year
     urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
-    new_scenario_name = f"{district_archetype}_{year}_{urban_development_scenario}"
+
+    new_scenario_name = f"{year}_{urban_development_scenario}"
     config.scenario_name = new_scenario_name
+    with open(os.path.join(config.scenario, str(new_scenario_name)+"_PARAMS.json"), "w") as fp:
+        json.dump(PARAMS, fp)
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     ## gather input data
     typology_merged = get_sample_data(new_locator)
