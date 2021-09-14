@@ -15,9 +15,10 @@ __status__ = "Production"
 
 
 def main(config):
-    cea.api.remap_copy_archetypes(config=config)
-    cea.api.remap_use_types(config=config)
-    cea.api.remap_construction_standards(config=config)
+    cea.api.setup_new_scenario(config=config)
+    cea.api.create_technology_databases(config=config)
+    # cea.api.remap_use_types(config=config) # TODO: might be redundant
+    # cea.api.remap_construction_standards(config=config) # apply new construction standards for retrofitted buildings
 
 
 if __name__ == "__main__":
