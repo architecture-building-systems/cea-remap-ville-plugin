@@ -8,7 +8,7 @@ import geopandas as gpd
 import cea.config
 import cea.inputlocator
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
-from copy_archetypes import copy_file
+from create_technology_database import copy_file
 import remap_ville_plugin.urban_transformation as urban_transformation
 
 __author__ = "Shanshan Hsieh"
@@ -40,20 +40,24 @@ def main(config):
     copy_file(old_locator.get_building_typology(), new_locator.get_building_typology())
     copy_file(old_locator.get_building_architecture(), new_locator.get_building_architecture())
 
-    # Urban Transformation
-    print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
-    urban_transformation.main(config)
+    # Urban Transformation # FIXME: move out or connect to config option
+    # print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
+    # urban_transformation.main(config)
 
     # modify dbf
     print(f"Modifying building preperties in... {year}")
+    # copy air conditioning and supply system
     copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
     copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
     typology_df = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name')
     MULTI_RES_2040, ORIG_RES, OTHER_USES = get_building_lists_by_use(typology_df)
+    # update air-conditioning according to use
     airconditioning_df = dbf_to_dataframe(new_locator.get_building_air_conditioning()).set_index('Name')
     airconditioning_df = update_air_conditioning_dbf(MULTI_RES_2040, ORIG_RES, OTHER_USES, airconditioning_df)
+    # update supply system according to use
     supply_df = dbf_to_dataframe(new_locator.get_building_supply()).set_index('Name')
     supply_df.loc[:, 'type_cs'] = 'SUPPLY_COOLING_AS1'
+    # update architecture for MULTI_RES_2040
     architecture_df = dbf_to_dataframe(new_locator.get_building_architecture()).set_index('Name')
     architecture_df = update_architecture_dbf(MULTI_RES_2040, architecture_df)
     save_dbfs(airconditioning_df, new_locator.get_building_air_conditioning())
