@@ -28,7 +28,7 @@ def main(config):
 
     old_scenario_name = config.scenario_name
     old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    new_scenario_name = f"{district_archetype}_{year}_{urban_development_scenario}"
+    new_scenario_name = f"{year}_{urban_development_scenario}"
     config.scenario_name = new_scenario_name
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     initialize_input_folder(config, new_locator)
@@ -41,9 +41,11 @@ def main(config):
     copy_file(old_locator.get_building_architecture(), new_locator.get_building_architecture())
 
     # Urban Transformation
+    print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
     urban_transformation.main(config)
 
     # modify dbf
+    print(f"Modifying building preperties in... {year}")
     copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
     copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
     typology_df = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name')
@@ -109,7 +111,8 @@ def copy_folder(src, dst):
 
 def initialize_input_folder(config, new_locator):
     if os.path.exists(config.scenario):
-        shutil.rmtree(config.scenario)
+        raise ValueError((f"{config.scenario} exists, please remove the folder before proceeding."))
+        # shutil.rmtree(config.scenario)
     os.mkdir(config.scenario)
     os.mkdir(new_locator.get_input_folder())
     return
