@@ -10,11 +10,11 @@ ReMaP / Ville:
   - [get_zone_geometry]
   - [get_building_typology]
 
-- name: remap-copy-archetypes
-  label: Copy ReMaP Archetypes
-  description: Copies the archetypes for the scenario based on the parameters
+- name: create-technology-databases
+  label: Copy ReMaP Technology Databases
+  description: Create technology databases folder for new scenarios
   interfaces: [cli]
-  module: remap_ville_plugin.copy_archetypes
+  module: remap_ville_plugin.create_technology_database
   parameters: ["general:scenario", "remap-ville-scenarios:district-archetype",
                "remap-ville-scenarios:urban-development-scenario",
                "remap-ville-scenarios:year"]
