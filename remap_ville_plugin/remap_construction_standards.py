@@ -35,6 +35,7 @@ def main(config):
     mapping = read_mapping()
     typology = cea.utilities.dbf.dbf_to_dataframe(locator.get_building_typology())
 
+    # FIXME: row 39-40 select buildings according to retrofit scenarios and year
     for index, row in typology.iterrows():
         building = row.Name
         old_standard = row.STANDARD
