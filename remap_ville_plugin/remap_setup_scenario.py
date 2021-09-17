@@ -40,9 +40,9 @@ def main(config):
     copy_file(old_locator.get_building_typology(), new_locator.get_building_typology())
     copy_file(old_locator.get_building_architecture(), new_locator.get_building_architecture())
 
-    # Urban Transformation # FIXME: move out or connect to config option
-    # print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
-    # urban_transformation.main(config)
+    # Urban Transformation
+    print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
+    urban_transformation.main(config)
 
     # modify dbf
     print(f"Modifying building preperties in... {year}")

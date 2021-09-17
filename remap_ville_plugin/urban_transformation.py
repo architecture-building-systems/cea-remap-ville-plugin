@@ -74,7 +74,8 @@ def main(config):
     # TODO: KEEP "FUTURE RESERVED AREA" (ONLY FOOTPRINTS BUT NO HEIGHT) TO BUILD MULTI_RES
 
     ## SET TARGET GFA RATIOS
-    # get relative ratio total_additional_gfa_target
+    # get relative ratio
+    # total_additional_gfa_target
     gfa_per_use_statusquo = combine_MULTI_RES_gfa(gfa_per_use_statusquo)  # FIXME: redundant?
     gfa_per_use_statusquo, rel_ratio_to_res_gfa_target = calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, config)
     # get future required residential gfa
