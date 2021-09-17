@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# @ignore-nasty
+*_updated.*
+.idea
+
 # C extensions
 *.so
 
@@ -131,3 +135,5 @@ dmypy.json
 
 # intellij configs
 .idea/
+.idea/misc.xml
+.idea/cea-plugin-template.iml

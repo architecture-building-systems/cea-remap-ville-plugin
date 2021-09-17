@@ -27,19 +27,19 @@ def main(config):
     database_root = os.path.join(os.path.dirname(__file__), "CH_ReMaP")
 
     folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
-    print(f"Copying archetypes for {folder_name}")
+    print(f"Creating technology folder for {folder_name}")
 
-    print(f"Copying assemblies...")
+    print(f"Creating assemblies...")
     copy_assemblies_folder(database_root, locator)
 
-    print(f"Copying components...")
+    print(f"Creating components...")
     copy_components_folder(database_root, locator)
 
-    print(f"Copying construction standard")
-    copy_file(os.path.join(database_root, "archetypes", folder_name, "CONSTRUCTION_STANDARD.xlsx"),
+    print(f"Creating construction standards...")
+    copy_file(os.path.join(database_root, "archetypes", "CONSTRUCTION_STANDARD_SUMMARY.xlsx"),
               locator.get_database_construction_standards())
 
-    print(f"Copying use types")
+    print(f"Creating use types...")
     copy_use_types(database_root, folder_name, locator)
 
 
@@ -69,8 +69,11 @@ def copy_assemblies_folder(database_root, locator):
 
 
 def copy_file(src, dst):
-    print(f" - {dst}")
+    if not os.path.exists(os.path.dirname(dst)):
+        os.makedirs(os.path.dirname(dst))
+        print(f" - {os.path.dirname(dst)} created")
     shutil.copyfile(src, dst)
+    print(f" - {dst}")
 
 
 if __name__ == "__main__":
