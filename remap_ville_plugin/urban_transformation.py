@@ -16,7 +16,7 @@ import cea.inputlocator
 from cea.demand.building_properties import calc_useful_areas
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
 from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns, count_usetype
-import area_mapper.area_mapper as amap
+import area_optimization_mapper as amap
 
 __author__ = "Anastasiya Popova, Shanshan Hsieh"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
