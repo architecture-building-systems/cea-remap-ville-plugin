@@ -27,17 +27,19 @@ from cea.demand.building_properties import calc_useful_areas
 def main():
     PARAMS = {
         # scenario-specific
-        'path': r"C:\Users\shsieh\Nextcloud\VILLE\Case studies\Echallens\15062021-prep-inputs\2040_area_mapper\area_mapper",
-        'additional_population': 2649,  # people
-        'future_occupant_density': 60,  # living space m2/occupants
-        'current_SFH_occupant_density': 120,  # living space m2/occupants
-        'UD_scenario': 'DCL',  # SQ, DCL, BAL
-        'building_height_limit': 36,  # m
+        'path': r"C:\Users\shsieh\Documents\CEA_Porjects\test_area_mapper",
+        'district_archetype': 'URB',
+        'scenario_year': 2040,
+        'UD_scenario': 'BAL',  # SQ, DCL, BAL
+        'additional_population': 2535,  # people
+        'future_occupant_density': 45,  # living space m2/occupants
+        'current_SFH_occupant_density': 150,  # living space m2/occupants
+        'building_height_limit': 80,  # m
         'MULTI_RES_PLANNED': 'MULTI_RES_2040',
         'USES_UNTOUCH': ['SINGLE_RES'],
         'preserve_buildings_built_before': 1920,
-        'SINGLE_to_MULTI_RES_ratio': 0.0,
-        'max_additional_floors': 36,
+        'SINGLE_to_MULTI_RES_ratio': 0.01,
+        'max_additional_floors': 80,
         # constants
         'ratio_living_space_to_GFA': 0.82,
         'floor_height': 3,  # m
@@ -45,10 +47,11 @@ def main():
         'scenario_count': 10
     }
 
-    with open(os.path.join(sample_data_dir(PARAMS), PARAMS["UD_scenario"]+'_PARAMS.json'), 'w') as fp:
+    path_to_output_folder = os.path.join('',*[sample_data_dir(PARAMS), str(PARAMS["scenario_year"])+'_'+PARAMS["UD_scenario"]])
+    path_to_output_folder = Path(path_to_output_folder)
+    remove_updated_files(path_to_output_folder, clean=True)  # if True, cleans the output files in sample_data folder
+    with open(os.path.join(path_to_output_folder, str(PARAMS["scenario_year"])+'_'+PARAMS["UD_scenario"]+'_PARAMS.json'), 'w') as fp:
         json.dump(PARAMS, fp)
-
-    remove_updated_files(PARAMS, clean=True)  # if True, cleans the output files in sample_data folder
     overview = {}
     ## Read typology_merged
     typology_merged = get_sample_data(PARAMS)
@@ -63,11 +66,11 @@ def main():
     typology_statusquo, typology_planned = remove_buildings_by_uses(typology_statusquo,
                                                                     uses_to_remove=[PARAMS['MULTI_RES_PLANNED']])
     gfa_per_use_statusquo = calc_gfa_per_use(typology_statusquo, "GFA_m2")
-    gfa_per_use_planned = calc_gfa_per_use(typology_planned, "GFA_m2")
-    gfa_res_planned = gfa_per_use_planned[PARAMS['MULTI_RES_PLANNED']]
+    gfa_per_use_planned = calc_gfa_per_use(typology_planned, "GFA_m2") if typology_planned else None
+    gfa_res_planned = gfa_per_use_planned[PARAMS['MULTI_RES_PLANNED']] if gfa_per_use_planned else 0.0
     overview["gfa_per_use_statusquo"] = gfa_per_use_statusquo.astype(int)
     overview["gfa_ratio_per_use_statusquo"] = round(gfa_per_use_statusquo / gfa_per_use_statusquo.sum(), 5)
-    overview["gfa_per_use_planned"] = gfa_per_use_planned.astype(int)
+    overview["gfa_per_use_planned"] = gfa_per_use_planned.astype(int) if gfa_per_use_planned else 0.0
 
     # TODO: KEEP "FUTURE RESERVED AREA" (ONLY FOOTPRINTS BUT NO HEIGHT) TO BUILD MULTI_RES
 
@@ -75,7 +78,7 @@ def main():
     # get relative ratio total_additional_gfa_target
     gfa_per_use_statusquo = combine_statusquo_MULTI_RES_gfa(gfa_per_use_statusquo)
     gfa_per_use_statusquo, rel_ratio_to_res_gfa_target = calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo,
-                                                                                          PARAMS['UD_scenario'])
+                                                                                          PARAMS)
     # get future required residential gfa
     future_required_additional_res_gfa = calc_additional_requied_residential_gfa(PARAMS)
     # calculate future required gfa per us
@@ -100,7 +103,7 @@ def main():
             gfa_to_MULTI_RES += building_gfa
             num_occupants = round(
                 building_gfa * PARAMS["ratio_living_space_to_GFA"] / PARAMS["current_SFH_occupant_density"])
-            extra_gfa = building_gfa - num_occupants * PARAMS["future_occupant_density"]
+            extra_gfa = building_gfa - num_occupants * (PARAMS["future_occupant_density"] / PARAMS["ratio_living_space_to_GFA"])
             extra_gfa_from_SINGLE_RES_conversion += extra_gfa
             typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"SINGLE_RES": "MULTI_RES"})
         gfa_per_use_future_required_target["SINGLE_RES"] = gfa_per_use_future_required_target[
@@ -122,13 +125,13 @@ def main():
                                                                                           'USES_UNTOUCH'])
 
     # keep old buildings unchanged
-    buildings_filtered_out_by_age = filter_buildings_by_year_sample_data(
+    buildings_filtered_out_by_age = filter_buildings_by_year(
         buildings_filtered_out_by_use,
         year=PARAMS["preserve_buildings_built_before"] + 1,
         less_than=True
     ).copy()
 
-    buildings_kept = filter_buildings_by_year_sample_data(
+    buildings_kept = filter_buildings_by_year(
         buildings_filtered_out_by_use,
         year=PARAMS["preserve_buildings_built_before"],
         less_than=False
@@ -220,25 +223,32 @@ def main():
     best_typology_df = best_typology_df.append(typology_planned, sort=True)
     best_typology_df = best_typology_df.append(typology_untouched_uses, sort=True)
     result_add_floors = amap.parse_milp_solution(optimizations[best_scenario]["solution"])
-    path_to_output_zone_shape_file = sample_data_dir(PARAMS)/ "updated/zone.shp"
-    path_to_output_typology_file = sample_data_dir(PARAMS) / "updated/typology.dbf"
-    save_best_scenraio(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
-                       path_to_output_zone_shape_file, path_to_output_typology_file, PARAMS)
+    path_to_output_zone_shape_file = path_to_output_folder / "zone.shp"
+    path_to_output_typology_file = path_to_output_folder / "typology.dbf"
+    save_best_scenraio(best_typology_df, result_add_floors, optimizations[best_scenario]['building_to_sub_building'],
+                       typology_statusquo, path_to_output_zone_shape_file, path_to_output_typology_file, PARAMS)
 
     # get updated data
     prop_geometry = get_prop_geometry(path_to_output_zone_shape_file,
                                       sample_data_dir(PARAMS) / "architecture.dbf")
     typology_updated = dbf_to_dataframe(str(path_to_output_typology_file.absolute())).set_index('Name', drop=False)
     typology_updated = typology_updated.merge(prop_geometry, left_index=True, right_on='Name')
+    use_count_df = count_usetype(typology_updated)
     gfa_per_use_type_updated = calc_gfa_per_use(typology_updated, "GFA_m2")
     overview['gfa_per_use_updated'] = gfa_per_use_type_updated.astype(int)
     overview['gfa_per_ratio_updated'] = round(gfa_per_use_type_updated / gfa_per_use_type_updated.sum(), 5)
     overview['actual_add_gfa_per_use'] = overview['gfa_per_use_updated'] - overview['gfa_per_use_statusquo']
     overview['diff_add_gfa_per_use'] = overview['target_add_gfa_per_use'] - overview['actual_add_gfa_per_use']
     overview_df = pd.DataFrame(overview)
-    overview_df.to_csv(os.path.join(sample_data_dir(PARAMS), PARAMS["UD_scenario"] + "_overview.csv"))
+    overview_df = pd.concat([overview_df, use_count_df], axis=1)
+    overview_df.to_csv(os.path.join(path_to_output_folder, PARAMS["UD_scenario"] + "_overview.csv"))
 
     return
+
+def count_usetype(typology_updated):
+    use_count_df = typology_updated[['1ST_USE', '2ND_USE', '3RD_USE']]
+    use_count_df = use_count_df.apply(pd.value_counts)
+    return use_count_df
 
 
 def update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target):
@@ -271,20 +281,19 @@ def combine_statusquo_MULTI_RES_gfa(gfa_per_use_statusquo):
     return gfa_per_use_statusquo
 
 
-def calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, scenario):
+def calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, PARAMS):
     """
     1. read target ratio
     2. update rel_ratio_to_res_gfa for use that exists but not specified in target
     :param gfa_per_use_statusquo: in m2
-    :param scenario: urban development scenario
     :return:
     """
     gfa_per_use_statusquo_in = gfa_per_use_statusquo.copy()
-    if scenario == 'SQ':
+    if PARAMS['UD_scenario'] == 'SQ':
         rel_ratio_to_res_gfa_target = (gfa_per_use_statusquo / gfa_per_use_statusquo.filter(like='_RES').sum())
     else:
         # read target ratio
-        rel_ratio_to_res_gfa_target = read_mapping('SURB', '2040', scenario)
+        rel_ratio_to_res_gfa_target = read_mapping_use_ratio(PARAMS)
         # unify columns in target_rel_ratios and gfa_per_use_statusquo
         zero_series = pd.DataFrame(0.0, index=range(1), columns=rel_ratio_to_res_gfa_target.index).loc[0]
         gfa_per_use_statusquo = zero_series.combine(gfa_per_use_statusquo, max)
@@ -304,7 +313,8 @@ def calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, scenario):
 
 
 def calc_range_additional_floors_per_building(PARAMS, typology_status_quo):
-    height_limit_per_city_zone = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])}
+    # height_limit_per_city_zone = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])}
+    height_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26), 3: (0, 13)} # FIXME: this only applies to Altstetten
     range_additional_floors_per_building = dict()
     for name, building in typology_status_quo.iterrows():
         min_floors, max_floors = height_limit_per_city_zone[building.city_zone]
@@ -352,7 +362,7 @@ def sample_typology_data(PARAMS) -> pd.DataFrame:
     return typology
 
 
-def filter_buildings_by_year_sample_data(typology_merged: pd.DataFrame, year: int, less_than: bool = True):
+def filter_buildings_by_year(typology_merged: pd.DataFrame, year: int, less_than: bool = True):
     if "YEAR" not in typology_merged:
         raise KeyError("provided data frame is missing the column 'YEAR'")
     if less_than:
@@ -370,6 +380,8 @@ def remove_buildings_by_uses(typology_df: pd.DataFrame, uses_to_remove: list):
             typology_remained_df[typology_remained_df["1ST_USE"] == use].index)
     building_names_remained = typology_remained_df.index
     typology_removed_df = typology_df.loc[list(set(orig_building_names) - set(building_names_remained))]
+    if len(typology_removed_df) < 1:
+        typology_removed_df = None
     return typology_remained_df, typology_removed_df
 
 
@@ -389,7 +401,7 @@ def get_sample_data(PARAMS) -> pd.DataFrame:
     # write typology_merged
     typology_merged = typology.merge(prop_geometries, left_index=True, right_on='Name')
     typology_merged.floors_ag = typology_merged.floors_ag.astype(int)
-    typology_merged["city_zone"] = 1
+    # typology_merged["city_zone"] = 1
     typology_merged["additional_floors"] = 0
     typology_merged["floors_ag_updated"] = typology_merged.floors_ag.astype(int)
     typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
@@ -406,7 +418,16 @@ def get_possible_uses_per_cityzone() -> Dict[int, Set[str]]:
     :return:
     """
     return {
+        0: {"SINGLE_RES", "MULTI_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL",
+            "GYM", "SCHOOL", "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL",
+            "MUSEUM", "SWIMMING", "UNIVERSITY"},
         1: {"SINGLE_RES", "MULTI_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL",
+            "GYM", "SCHOOL", "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL",
+            "OFFICE", "MUSEUM", "SERVERROOM", "SWIMMING", "UNIVERSITY", "COOLROOM"},
+        2: {"SINGLE_RES", "MULTI_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL",
+            "GYM", "SCHOOL", "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL",
+            "OFFICE", "MUSEUM", "SERVERROOM", "SWIMMING", "UNIVERSITY", "COOLROOM"},
+        3: {"SINGLE_RES", "MULTI_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL",
             "GYM", "SCHOOL", "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL",
             "OFFICE", "MUSEUM", "SERVERROOM", "SWIMMING", "UNIVERSITY", "COOLROOM"},
     }
@@ -445,8 +466,7 @@ def calc_additional_requied_residential_gfa(PARAMS):
     return future_required_additional_res_gfa
 
 
-def remove_updated_files(PARAMS, clean=True):
-    updated_folder = sample_data_dir(PARAMS)/"updated"
+def remove_updated_files(updated_folder, clean=True):
     if clean and updated_folder.exists():
         data_files = os.listdir(updated_folder)
         for file in data_files:
@@ -460,17 +480,17 @@ def remove_updated_files(PARAMS, clean=True):
     return
 
 
-def read_mapping(district_archetype, year, urban_development_scenario):
+def read_mapping_use_ratio(PARAM):
     """
     read numbers from table
     :return:
     """
-    worksheet = f"{district_archetype}_{year}"
-    print(f"Reading mappings from worksheet {worksheet}")
+    worksheet = f"{PARAM['district_archetype']}_{PARAM['scenario_year']}"
+    print(f"Reading use type ratio mappings from worksheet {worksheet}")
     path = Path.cwd().parent
     path_to_mapping_table = os.path.join('', *[path, "remap_ville_plugin", "mapping_BUILDING_USE_RATIO.xlsx"])
     mapping_df = pd.read_excel(path_to_mapping_table, sheet_name=worksheet).set_index("Scenario")
-    rel_ratio_to_res_gfa_per_use = mapping_df.loc[urban_development_scenario].drop("Reference")
+    rel_ratio_to_res_gfa_per_use = mapping_df.loc[PARAM['UD_scenario']].drop("Reference")
     return rel_ratio_to_res_gfa_per_use
 
 
@@ -478,14 +498,13 @@ def save_best_scenraio(best_typology_df, result_add_floors, building_to_sub_buil
                        path_to_output_zone_shape_file, path_to_output_typology_file, PARAMS):
     # update zone.shp
     path_to_input_zone_shape_file = sample_data_dir(PARAMS) / "zone.shp"
-    floors_ag_updated, zone_shp_updated = amap.update_zone_shp(best_typology_df,
-                                                          result_add_floors,
-                                                          building_to_sub_building,
-                                                          path_to_input_zone_shape_file,
-                                                          path_to_output_zone_shape_file)
+    floors_ag_updated, zone_shp_updated = amap.update_zone_shp(best_typology_df, result_add_floors,
+                                                               building_to_sub_building,
+                                                               path_to_input_zone_shape_file,
+                                                               path_to_output_zone_shape_file)
     # update typology.dbf
     amap.update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
                         zone_shp_updated, floors_ag_updated, path_to_output_typology_file, PARAMS)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
