@@ -36,7 +36,7 @@ def main(config):
     copy_components_folder(database_root, locator)
 
     print(f"Creating construction standards...")
-    copy_file(os.path.join(database_root, "archetypes", folder_name, "CONSTRUCTION_STANDARD.xlsx"),
+    copy_file(os.path.join(database_root, "archetypes", "CONSTRUCTION_STANDARD_SUMMARY.xlsx"),
               locator.get_database_construction_standards())
 
     print(f"Creating use types...")
