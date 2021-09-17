@@ -1,6 +1,5 @@
 """
-Map the field ``typology.df:STANDARD`` to the new value, based on
-
+Map the field ``typology.df:STANDARD`` to the new value, based on:
 - construction (BAU / NEP)
 - year (2040 / 2060)
 - district-archetype (URB, SURB, RRL)
@@ -42,8 +41,7 @@ def main(config):
         use_type = row["1ST_USE"]
         new_standard = do_mapping(mapping, old_standard, district_archetype, use_type, year, construction)
         print(f"Updating {building}, {old_standard} => {new_standard}")
-
-        typology.loc[index, "STANDARD"] = new_standard
+        typology.loc[index, "STANDARD"] = new_standard # FIXME: investigate Key error!
 
     cea.utilities.dbf.dataframe_to_dbf(typology, locator.get_building_typology())
 
