@@ -1,11 +1,6 @@
-__author__ = "Anastasiya Popova"
-__copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
-__credits__ = ["Daren Thomas"]
-__license__ = "MIT"
-__version__ = "0.1"
-__maintainer__ = "Anastasiya Popova"
-__email__ = "cea@arch.ethz.ch"
-__status__ = "Production"
+"""
+optimization functions to map area increase per building for urban_transformation.py
+"""
 
 from typing import List, Dict, Set, Tuple, Union, NoReturn
 from numpy.random import Generator, PCG64
@@ -20,7 +15,16 @@ import pulp
 import pandas as pd
 import numpy as np
 
-incopetibale_use_types = {
+__author__ = "Anastasiya Popova, Shanshan Hsieh"
+__copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
+__credits__ = ["Daren Thomas"]
+__license__ = "MIT"
+__version__ = "0.1"
+__maintainer__ = "Anastasiya Popova"
+__email__ = "cea@arch.ethz.ch"
+__status__ = "Production"
+
+incompetibale_use_types = {
     "COOLROOM": ["SINGLE_RES"],
     "FOODSTORE": ["SINGLE_RES"],
     "GYM": ["SINGLE_RES"],
@@ -62,8 +66,8 @@ def randomize(
         available_uses_cityzone = set(mapping[data_frame_copy.at[i, city_zone_name]])
         not_available_uses_building = []
         for use in current_uses:
-            if use in incopetibale_use_types.keys():
-                not_available_uses_building.extend(incopetibale_use_types[use])
+            if use in incompetibale_use_types.keys():
+                not_available_uses_building.extend(incompetibale_use_types[use])
         available_uses_building = available_uses_cityzone.difference(set(not_available_uses_building))
         choices = list(available_uses_building.difference(set(current_uses)))
         additional = generator.choice(choices, size=how_many_free_uses, replace=False)
