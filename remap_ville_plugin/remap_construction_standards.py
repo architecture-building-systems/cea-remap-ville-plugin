@@ -13,6 +13,7 @@ import pandas as pd
 import cea.config
 import cea.inputlocator
 import cea.utilities.dbf
+import cea.datamanagement.archetypes_mapper
 
 __author__ = "Daren Thomas"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -32,6 +33,7 @@ def main(config):
     locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
 
     mapping = read_mapping()
+    print('\n modifying typology in...', locator.get_building_typology())
     typology = cea.utilities.dbf.dbf_to_dataframe(locator.get_building_typology())
 
     # FIXME: row 39-40 select buildings according to retrofit scenarios and year
@@ -45,6 +47,17 @@ def main(config):
 
     cea.utilities.dbf.dataframe_to_dbf(typology, locator.get_building_typology())
 
+    buildings = locator.get_zone_building_names()
+    cea.datamanagement.archetypes_mapper.archetypes_mapper(
+        locator=locator,
+        update_architecture_dbf=True,
+        update_air_conditioning_systems_dbf=True,
+        update_indoor_comfort_dbf=True,
+        update_internal_loads_dbf=False,
+        update_supply_systems_dbf=True,
+        update_schedule_operation_cea=False,
+        buildings=buildings)
+    print('\n Building properties are updated!')
 
 def do_mapping(mapping, old_standard, district_archetype, use_type, year, construction):
     try:
