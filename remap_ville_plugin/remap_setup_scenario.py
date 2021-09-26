@@ -8,7 +8,7 @@ import geopandas as gpd
 import cea.config
 import cea.inputlocator
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
-from create_technology_database import copy_file
+from remap_ville_plugin.create_technology_database import copy_file
 import remap_ville_plugin.urban_transformation as urban_transformation
 
 __author__ = "Shanshan Hsieh"
