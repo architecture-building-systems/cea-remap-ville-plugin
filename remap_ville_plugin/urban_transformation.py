@@ -360,7 +360,11 @@ def get_possible_uses_per_cityzone():
 
 
 def calc_range_additional_floors_per_building(typology_status_quo):
-    height_limit_per_city_zone = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])} # FIXME
+    height_limit_per_city_zone = {
+        0: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
+        1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
+        2: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
+        3: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])} # FIXME
     # height_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26),
     #                               3: (0, 13)}  # FIXME: this only applies to Altstetten
     range_additional_floors_per_building = dict()
