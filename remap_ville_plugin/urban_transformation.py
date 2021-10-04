@@ -29,13 +29,13 @@ __status__ = "Production"
 
 PARAMS = {
     'MULTI_RES_PLANNED': 'MULTI_RES_2040',
-    'additional_population': 3735,  # people
+    'additional_population': 4725,  # people
     'current_SFH_occupant_density': 150,  # living space m2/occupants # FIXME: read from input scenario
-    'future_occupant_density': 45,  # living space m2/occupants # FIXME: get from CH_ReMaP
+    'future_occupant_density': 50,  # living space m2/occupants # FIXME: get from CH_ReMaP
     'USES_UNTOUCH': ['SINGLE_RES'],
-    'SINGLE_to_MULTI_RES_ratio': 0.0,
+    'SINGLE_to_MULTI_RES_ratio': 0.02,
     'preserve_buildings_built_before': 1920,
-    'building_height_limit': 80,  # m
+    'building_height_limit': 42,  # m
     # constants
     'ratio_living_space_to_GFA': 0.82,
     'floor_height': 3,  # m
@@ -138,12 +138,8 @@ def main(config):
     range_additional_floors_per_building = calc_range_additional_floors_per_building(buildings_kept)
     possible_uses_per_cityzone = update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target)
     # create random scenarios
-    scenarios = amap.randomize_scenarios(
-        typology_merged=buildings_kept,
-        mapping=possible_uses_per_cityzone,
-        use_columns=typology_use_columns(),
-        scenario_count=PARAMS['scenario_count'],
-    )
+    scenarios = amap.randomize_scenarios(typology_merged=buildings_kept, usetype_constraints=possible_uses_per_cityzone,
+                                         use_columns=typology_use_columns(), scenario_count=PARAMS['scenario_count'])
 
     ## OPTIMIZE ALL SCENARIOS
     metrics, optimizations = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
@@ -364,9 +360,9 @@ def get_possible_uses_per_cityzone():
 
 
 def calc_range_additional_floors_per_building(typology_status_quo):
-    # height_limit_per_city_zone = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])} # FIXME: this only applies to Altstetten
-    height_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26),
-                                  3: (0, 13)}  # FIXME: this only applies to Altstetten
+    height_limit_per_city_zone = {1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])} # FIXME
+    # height_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26),
+    #                               3: (0, 13)}  # FIXME: this only applies to Altstetten
     range_additional_floors_per_building = dict()
     for name, building in typology_status_quo.iterrows():
         min_floors, max_floors = height_limit_per_city_zone[building.city_zone]
@@ -430,7 +426,7 @@ def calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, config):
             rel_ratio_to_res_gfa_target[use] = target_val
     # drop uses with zero ratio
     rel_ratio_to_res_gfa_target = rel_ratio_to_res_gfa_target[rel_ratio_to_res_gfa_target > 0.0]
-    gfa_per_use_statusquo = gfa_per_use_statusquo.loc[rel_ratio_to_res_gfa_target.index]
+    gfa_per_use_statusquo = gfa_per_use_statusquo.loc[rel_ratio_to_res_gfa_target.index] # get relevant uses
     assert np.isclose(gfa_per_use_statusquo_in.sum(), gfa_per_use_statusquo.sum())  # make sure total gfa is unchanged
     return gfa_per_use_statusquo, rel_ratio_to_res_gfa_target
 
