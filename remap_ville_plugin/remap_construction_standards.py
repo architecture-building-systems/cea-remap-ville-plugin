@@ -13,6 +13,8 @@ import pandas as pd
 import cea.config
 import cea.inputlocator
 import cea.utilities.dbf
+import cea.datamanagement.archetypes_mapper
+from remap_ville_plugin.create_technology_database import copy_file, copy_assemblies_folder, copy_use_types
 
 __author__ = "Daren Thomas"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -31,7 +33,23 @@ def main(config):
 
     locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
 
+    # FIXME: work around to copy construction standard, should be deleted before merging
+    print(f"Creating construction standards...")
+    database_root = os.path.join(os.path.dirname(__file__), "CH_ReMaP")
+    copy_file(os.path.join(database_root, "archetypes", "CONSTRUCTION_STANDARD_SUMMARY.xlsx"),
+              locator.get_database_construction_standards())
+    print(f"Creating assemblies...")
+    copy_assemblies_folder(database_root, locator)
+
+    print(f"Creating use types...")
+    urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
+    folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
+    print(folder_name)
+    copy_use_types(database_root, folder_name, locator)
+    # FIXME: END OF HACK
+
     mapping = read_mapping()
+    print('\n modifying typology in...', locator.get_building_typology())
     typology = cea.utilities.dbf.dbf_to_dataframe(locator.get_building_typology())
 
     # FIXME: row 39-40 select buildings according to retrofit scenarios and year
@@ -40,11 +58,22 @@ def main(config):
         old_standard = row.STANDARD
         use_type = row["1ST_USE"]
         new_standard = do_mapping(mapping, old_standard, district_archetype, use_type, year, construction)
-        print(f"Updating {building}, {old_standard} => {new_standard}")
+        # print(f"Updating {building}, {old_standard} => {new_standard}")
         typology.loc[index, "STANDARD"] = new_standard # FIXME: investigate Key error!
 
     cea.utilities.dbf.dataframe_to_dbf(typology, locator.get_building_typology())
 
+    buildings = locator.get_zone_building_names()
+    cea.datamanagement.archetypes_mapper.archetypes_mapper(
+        locator=locator,
+        update_architecture_dbf=True,
+        update_air_conditioning_systems_dbf=True,
+        update_indoor_comfort_dbf=True,
+        update_internal_loads_dbf=False,
+        update_supply_systems_dbf=True,
+        update_schedule_operation_cea=False,
+        buildings=buildings)
+    print('\n Building properties are updated!')
 
 def do_mapping(mapping, old_standard, district_archetype, use_type, year, construction):
     try:
