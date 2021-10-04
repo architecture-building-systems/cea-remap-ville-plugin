@@ -45,14 +45,8 @@ incompetibale_use_types = {
 }
 
 
-def randomize(
-        data_frame: pd.DataFrame,
-        generator: Generator,
-        mapping: Dict[int, Set],
-        use_columns: List[str],
-        missing_use_name: str = "NONE",
-        city_zone_name: str = "city_zone"
-) -> pd.DataFrame:
+def randomize(data_frame: pd.DataFrame, generator: Generator, usetype_constraints: Dict[int, Set],
+              use_columns: List[str], missing_use_name: str = "NONE", city_zone_name: str = "city_zone") -> pd.DataFrame:
     """
     generates additional building uses through randomization
     given rules by city_zone in 'mapping'
@@ -63,7 +57,8 @@ def randomize(
         how_many_free_uses = row.sum()
         current_uses = data_frame_copy.loc[i, use_columns][~row].values
         # get available uses
-        available_uses_cityzone = set(mapping[data_frame_copy.at[i, city_zone_name]])
+        available_uses_cityzone = set(usetype_constraints[data_frame_copy.at[i, city_zone_name]])
+        # available_uses_cityzone = set(mapping[1]) # FIXME: bypass reading city_zone_name column
         not_available_uses_building = []
         for use in current_uses:
             if use in incompetibale_use_types.keys():
@@ -205,18 +200,13 @@ def find_optimum_scenario(
     return minimum, errors
 
 
-def randomize_scenarios(
-        typology_merged: pd.DataFrame,
-        mapping: Dict[int, Set[str]],
-        use_columns: List[str],
-        scenario_count: int = 1000,
-        seed: int = 12357
-) -> Dict[int, pd.DataFrame]:
+def randomize_scenarios(typology_merged: pd.DataFrame, usetype_constraints: Dict[int, Set[str]], use_columns: List[str],
+                        scenario_count: int = 1000, seed: int = 12357) -> Dict[int, pd.DataFrame]:
     scenarios = dict()
     generator = Generator(PCG64(seed))
     for scenario in range(scenario_count):
         df = typology_merged.copy()
-        scenarios[scenario] = randomize(df, generator, mapping, use_columns)
+        scenarios[scenario] = randomize(df, generator, usetype_constraints, use_columns)
 
     return scenarios
 
