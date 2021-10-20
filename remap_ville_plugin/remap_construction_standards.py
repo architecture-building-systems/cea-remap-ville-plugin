@@ -79,7 +79,7 @@ def do_mapping(mapping, old_standard, district_archetype, use_type, year, constr
     try:
         new_standard = mapping[(old_standard, district_archetype, use_type, year, construction)]
     except KeyError:
-        print("Key error!")
+        print("Archetype not specificed in the mapping table (mapping_CONSTRUCTION_STANDARD.xlsx)", (old_standard, district_archetype, use_type, year, construction))
         new_standard = old_standard
     return new_standard
 
