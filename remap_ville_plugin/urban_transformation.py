@@ -161,7 +161,7 @@ def main(config):
     best_typology_df = best_typology_df.append(typology_untouched_uses, sort=True)
     result_add_floors = amap.parse_milp_solution(optimizations[best_scenario]["solution"])
     save_best_scenario(best_typology_df, result_add_floors, optimizations[best_scenario]['building_to_sub_building'],
-                       typology_statusquo, new_locator)
+                       typology_statusquo, year, new_locator)
 
     # get updated data
     prop_geometry = get_prop_geometry(new_locator)
@@ -179,6 +179,29 @@ def main(config):
 
     return
 
+
+def order_uses_in_typology(typology_df):
+    ordered_typology_df = typology_df.copy()
+    mixed_use_buildings = typology_df[typology_df['1ST_USE_R'] < 1.0].index
+    for building in mixed_use_buildings:
+        ratios = typology_df.loc[building, ['1ST_USE_R', '2ND_USE_R', '3RD_USE_R']].values
+        uses = typology_df.loc[building, ['1ST_USE', '2ND_USE', '3RD_USE']].values
+        order = np.argsort(ratios)
+        ordered_ratios = [ratios[order[-1]], ratios[order[-2]], ratios[order[-3]]]
+        ordered_uses = [uses[order[-1]], uses[order[-2]], uses[order[-3]]]
+        # set use to NONE
+        for i, ratio in enumerate(ordered_ratios):
+            if ratio == 0.0:
+                ordered_uses[i] = 'NONE'
+        # move parking back
+        if ordered_uses[0] == 'PARKING':
+            ordered_uses = [ordered_uses[1], ordered_uses[0], ordered_uses[2]]
+            ordered_ratios = [ordered_ratios[1], ordered_ratios[0], ordered_ratios[2]]
+        # write back to dbf_df
+        for i, use_order in enumerate(['1ST_USE', '2ND_USE', '3RD_USE']):
+            ordered_typology_df.loc[building, use_order] = ordered_uses[i]
+            ordered_typology_df.loc[building, use_order + '_R'] = ordered_ratios[i]
+    return ordered_typology_df
 
 def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_building, path_to_input_zone_shape_file,
                     path_to_output_zone_shape_file):
@@ -200,7 +223,8 @@ def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_buildin
     return floors_ag_updated, zone_shp_updated
 
 
-def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo, new_locator):
+def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo, year,
+                       new_locator):
     # update zone.shp
     path_to_output_zone_shp = Path(new_locator.get_zone_geometry())
     path_to_output_typology_dbf = Path(new_locator.get_building_typology())
@@ -212,11 +236,11 @@ def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_buil
                                                           path_to_output_zone_shp)
     # update typology.dbf
     update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
-                             zone_shp_updated, floors_ag_updated, path_to_output_typology_dbf)
+                             zone_shp_updated, floors_ag_updated, path_to_output_typology_dbf, year)
 
 
 def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
-                        zone_shp_updated, floors_ag_updated, path_to_output_typology_file):
+                        zone_shp_updated, floors_ag_updated, path_to_output_typology_file, year):
     status_quo_typology = typology_statusquo.copy()
     simulated_typology = best_typology_df.copy()
 
@@ -232,6 +256,9 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
         updated_floor_per_use_col = dict()
         current_floors = status_quo_typology.loc[b, "floors_ag"] + status_quo_typology.loc[b, "floors_bg"]
         total_additional_floors = sum([result_add_floors[y] for y in sb])
+        if total_additional_floors > 0:
+            simulated_typology.loc[b, 'YEAR'] = int(year)
+            simulated_typology.loc[b, 'STANDARD'] = 'STANDARD6' # TODO: check
         assert np.isclose(total_additional_floors, floors_ag_updated[b])
         updated_floors = current_floors + total_additional_floors
         total_gfa = updated_floors * status_quo_typology.footprint[b]
@@ -254,6 +281,7 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
                 if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
                     simulated_typology.loc[b, use_col] = PARAMS['MULTI_RES_PLANNED']
                     # simulated_typology.loc[b, "STANDARD"] = "STANDARD5" # TODO: get from input
+    simulated_typology = order_uses_in_typology(simulated_typology)
     save_updated_typology(path_to_output_typology_file, simulated_typology)
 
 
