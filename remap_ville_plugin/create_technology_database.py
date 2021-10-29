@@ -61,11 +61,11 @@ def copy_components_folder(database_root, locator):
 
 def copy_assemblies_folder(database_root, locator):
     copy_file(os.path.join(database_root, "assemblies", "ENVELOPE.xls"),
-              locator.get_database_envelope_systems())
+              os.path.join(locator.get_databases_assemblies_folder(), 'ENVELOPE.xls')) #FIXME: workaround to be competible with CEA master, the assemblies folder should be updated when the docker image is updated with the latest master.
     copy_file(os.path.join(database_root, "assemblies", "HVAC.xls"),
-              locator.get_database_air_conditioning_systems())
+              os.path.join(locator.get_databases_assemblies_folder(), 'HVAC.xls'))
     copy_file(os.path.join(database_root, "assemblies", "SUPPLY.xls"),
-              locator.get_database_supply_assemblies())
+              os.path.join(locator.get_databases_assemblies_folder(), 'SUPPLY.xls'))
 
 
 def copy_file(src, dst):
