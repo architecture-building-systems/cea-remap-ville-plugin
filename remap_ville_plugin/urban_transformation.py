@@ -29,18 +29,18 @@ __status__ = "Production"
 
 PARAMS = {
     'MULTI_RES_PLANNED': 'MULTI_RES_2040',
-    'additional_population': 4725,  # people
+    'additional_population': 114,  # people
     'current_SFH_occupant_density': 150,  # living space m2/occupants # FIXME: read from input scenario
-    'future_occupant_density': 50,  # living space m2/occupants # FIXME: get from CH_ReMaP
+    'future_occupant_density': 80,  # living space m2/occupants # FIXME: get from CH_ReMaP
     'USES_UNTOUCH': ['SINGLE_RES'],
-    'SINGLE_to_MULTI_RES_ratio': 0.02,
+    'SINGLE_to_MULTI_RES_ratio': 0.0,
     'preserve_buildings_built_before': 1920,
     'building_height_limit': 42,  # m
     # constants
     'ratio_living_space_to_GFA': 0.82,
     'floor_height': 3,  # m
     'min_additional_floors': 0,
-    'max_additional_floors': 80,
+    'max_additional_floors': 50,
     'scenario_count': 10  # FIXME: advanced config parameter
 }
 
@@ -52,7 +52,7 @@ def main(config):
 
     new_scenario_name = f"{year}_{urban_development_scenario}"
     config.scenario_name = new_scenario_name
-    with open(os.path.join(config.scenario, str(new_scenario_name)+"_PARAMS.json"), "w") as fp:
+    with open(os.path.join(config.scenario, str(new_scenario_name) + "_PARAMS.json"), "w") as fp:
         json.dump(PARAMS, fp)
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     ## gather input data
@@ -80,36 +80,28 @@ def main(config):
     gfa_per_use_statusquo, rel_ratio_to_res_gfa_target = calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, config)
     # get future required residential gfa
     future_required_additional_res_gfa = calc_additional_requied_residential_gfa(PARAMS)
-    # calculate future required gfa per us
+    # calculate future required gfa per use
     gfa_per_use_future_required_target = calc_future_required_gfa_per_use(future_required_additional_res_gfa,
                                                                           gfa_per_use_statusquo,
                                                                           rel_ratio_to_res_gfa_target)
+
     ## calculate target_add_gfa_per_use
     # additional gfa per use
     gfa_per_use_additional_reuqired = gfa_per_use_future_required_target - gfa_per_use_statusquo
     gfa_per_use_additional_reuqired["MULTI_RES"] = gfa_per_use_additional_reuqired["MULTI_RES"] - gfa_res_planned
     gfa_per_use_additional_reuqired[gfa_per_use_additional_reuqired < 0] = 0.0
 
+    # transform part of SECONDARY_RES to MULTI_RES
+    gfa_per_use_additional_reuqired, \
+    gfa_per_use_future_required_target, \
+    typology_statusquo = convert_SECONDARY_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_required_target,
+                                               typology_statusquo, PARAMS)
+
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
-    buildings_SINGLE_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SINGLE_RES'].index)
-    num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * PARAMS['SINGLE_to_MULTI_RES_ratio'])
-    if num_buildings_to_MULTI_RES > 0.0:
-        buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
-        extra_gfa_from_SINGLE_RES_conversion, gfa_to_MULTI_RES = 0.0, 0.0
-        for b in buildings_to_MULTI_RES:
-            building_gfa = typology_statusquo.loc[b]['GFA_m2']
-            gfa_to_MULTI_RES += building_gfa
-            num_occupants = round(
-                building_gfa * PARAMS["ratio_living_space_to_GFA"] / PARAMS["current_SFH_occupant_density"])
-            extra_gfa = building_gfa - num_occupants * (
-                        PARAMS["future_occupant_density"] / PARAMS["ratio_living_space_to_GFA"])
-            extra_gfa_from_SINGLE_RES_conversion += extra_gfa
-            typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"SINGLE_RES": "MULTI_RES"})
-        gfa_per_use_future_required_target["SINGLE_RES"] = gfa_per_use_future_required_target[
-                                                               "SINGLE_RES"] - gfa_to_MULTI_RES
-        gfa_per_use_additional_reuqired["MULTI_RES"] = gfa_per_use_additional_reuqired[
-                                                           "MULTI_RES"] - extra_gfa_from_SINGLE_RES_conversion
-        assert gfa_per_use_additional_reuqired["MULTI_RES"] > 0.0
+    gfa_per_use_additional_reuqired, \
+    gfa_per_use_future_required_target, \
+    typology_statusquo = convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_required_target,
+                                            typology_statusquo)
 
     # update target_add_gfa_per_use
     target_add_gfa_per_use = gfa_per_use_additional_reuqired.astype(int).to_dict()
@@ -180,6 +172,60 @@ def main(config):
     return
 
 
+def convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_required_target, typology_statusquo):
+    buildings_SINGLE_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SINGLE_RES'].index)
+    num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * PARAMS['SINGLE_to_MULTI_RES_ratio'])
+    if num_buildings_to_MULTI_RES > 0.0:
+        print('Converting...', num_buildings_to_MULTI_RES, 'SINGLE_RES to MULTI_RES')
+        buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
+        extra_gfa_from_SINGLE_RES_conversion, gfa_to_MULTI_RES = 0.0, 0.0
+        for b in buildings_to_MULTI_RES:
+            building_gfa = typology_statusquo.loc[b]['GFA_m2']
+            gfa_to_MULTI_RES += building_gfa
+            num_occupants = round(
+                building_gfa * PARAMS["ratio_living_space_to_GFA"] / PARAMS["current_SFH_occupant_density"])
+            extra_gfa = building_gfa - num_occupants * (
+                    PARAMS["future_occupant_density"] / PARAMS["ratio_living_space_to_GFA"])
+            extra_gfa_from_SINGLE_RES_conversion += extra_gfa
+            typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"SINGLE_RES": "MULTI_RES"})
+        gfa_per_use_future_required_target["SINGLE_RES"] = gfa_per_use_future_required_target[
+                                                               "SINGLE_RES"] - gfa_to_MULTI_RES
+        gfa_per_use_additional_reuqired["MULTI_RES"] = gfa_per_use_additional_reuqired[
+                                                           "MULTI_RES"] - extra_gfa_from_SINGLE_RES_conversion
+        assert gfa_per_use_additional_reuqired["MULTI_RES"] > 0.0
+
+    return gfa_per_use_additional_reuqired, gfa_per_use_future_required_target, typology_statusquo
+
+
+def convert_SECONDARY_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_required_target,
+                          typology_statusquo, PARAMS):
+    buildings_SECONDARY_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SECONDARY_RES'].index)
+    SECONDARY_gfa = typology_statusquo.loc[buildings_SECONDARY_RES]['GFA_m2'].sum()
+    additional_required_MULTI_RES_gfa = gfa_per_use_additional_reuqired['MULTI_RES']
+    if SECONDARY_gfa > additional_required_MULTI_RES_gfa * 2:
+        results_dict = {}
+        for i in range(1000):
+            num_sampled_buildings = random.randrange(0, 50)
+            sampled_buildings = random.sample(set(buildings_SECONDARY_RES), num_sampled_buildings)
+            sampled_gfa = typology_statusquo.loc[sampled_buildings]['GFA_m2'].sum()
+            delta_gfa = round(sampled_gfa - additional_required_MULTI_RES_gfa, 2)
+            buffer = PARAMS['future_occupant_density'] * 2
+            if delta_gfa < buffer and delta_gfa > 0.0:
+                results_dict[delta_gfa] = sampled_buildings
+        buildings_to_MULTI_RES = results_dict[min(results_dict.keys())]
+        print('Converting...', len(buildings_to_MULTI_RES), 'SECONDARY_RES to MULTI_RES')
+        typology_statusquo.loc[buildings_to_MULTI_RES, '1ST_USE'] = 'MULTI_RES'
+        SECONDARY_to_MULTI_RES_gfa = typology_statusquo.loc[buildings_to_MULTI_RES]['GFA_m2'].sum()
+        gfa_per_use_additional_reuqired['MULTI_RES'] = max(
+            additional_required_MULTI_RES_gfa - SECONDARY_to_MULTI_RES_gfa, 0)
+    else:
+        SECONDARY_to_MULTI_RES_gfa = 0.0
+    # update targets
+    gfa_per_use_future_required_target["SECONDARY_RES"] = gfa_per_use_future_required_target["SECONDARY_RES"] \
+                                                          - SECONDARY_to_MULTI_RES_gfa
+    return gfa_per_use_additional_reuqired, gfa_per_use_future_required_target, typology_statusquo
+
+
 def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_building, path_to_input_zone_shape_file,
                     path_to_output_zone_shape_file):
     # update floors_ag and height_ag
@@ -212,7 +258,7 @@ def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_buil
                                                           path_to_output_zone_shp)
     # update typology.dbf
     update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
-                             zone_shp_updated, floors_ag_updated, path_to_output_typology_dbf)
+                        zone_shp_updated, floors_ag_updated, path_to_output_typology_dbf)
 
 
 def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
@@ -226,7 +272,7 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
     simulated_typology["1ST_USE_R"] = simulated_typology["1ST_USE_R"].astype(float)
     simulated_typology["2ND_USE_R"] = simulated_typology["2ND_USE_R"].astype(float)
     simulated_typology["3RD_USE_R"] = simulated_typology["3RD_USE_R"].astype(float)
-    simulated_typology["REFERENCE"] = "after-optimization"
+    simulated_typology["REFERENCE"] = "after-optimization"  # FIXME: change year as well
     use_col_dict = {i: column for i, column in enumerate(["1ST_USE", "2ND_USE", "3RD_USE"])}
     for b, sb in building_to_sub_building.items():
         updated_floor_per_use_col = dict()
@@ -251,8 +297,9 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
             if np.isclose(r, 0.0):
                 simulated_typology.loc[b, use_col] = "NONE"
             if simulated_typology.loc[b, use_col] == 'MULTI_RES':
+                # update MULTI_RES use-type properties
                 if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
-                    simulated_typology.loc[b, use_col] = PARAMS['MULTI_RES_PLANNED']
+                    simulated_typology.loc[b, use_col] = PARAMS['MULTI_RES_PLANNED']  # FIXME: hard-coded
                     # simulated_typology.loc[b, "STANDARD"] = "STANDARD5" # TODO: get from input
     save_updated_typology(path_to_output_typology_file, simulated_typology)
 
@@ -364,7 +411,7 @@ def calc_range_additional_floors_per_building(typology_status_quo):
         0: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
         1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
         2: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
-        3: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])} # FIXME
+        3: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])}  # FIXME
     # height_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26),
     #                               3: (0, 13)}  # FIXME: this only applies to Altstetten
     range_additional_floors_per_building = dict()
@@ -384,8 +431,8 @@ def filter_buildings_by_year(typology_merged: pd.DataFrame, year: int, less_than
     return typology_merged[op(typology_merged.YEAR, year)]
 
 
-def calc_future_required_gfa_per_use(future_required_additional_res_gfa, gfa_per_use_statusquo,
-                                     rel_ratio_to_res_gfa_target):
+def calc_future_required_gfa_per_use(future_required_additional_res_gfa,
+                                     gfa_per_use_statusquo, rel_ratio_to_res_gfa_target):
     future_required_res_gfa = (future_required_additional_res_gfa + gfa_per_use_statusquo.filter(like="_RES").sum())
     future_required_gfa_dict = dict()
     for use_type in rel_ratio_to_res_gfa_target.index:
@@ -430,7 +477,7 @@ def calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, config):
             rel_ratio_to_res_gfa_target[use] = target_val
     # drop uses with zero ratio
     rel_ratio_to_res_gfa_target = rel_ratio_to_res_gfa_target[rel_ratio_to_res_gfa_target > 0.0]
-    gfa_per_use_statusquo = gfa_per_use_statusquo.loc[rel_ratio_to_res_gfa_target.index] # get relevant uses
+    gfa_per_use_statusquo = gfa_per_use_statusquo.loc[rel_ratio_to_res_gfa_target.index]  # get relevant uses
     assert np.isclose(gfa_per_use_statusquo_in.sum(), gfa_per_use_statusquo.sum())  # make sure total gfa is unchanged
     return gfa_per_use_statusquo, rel_ratio_to_res_gfa_target
 
@@ -474,9 +521,9 @@ def remove_buildings_by_uses(typology_df: pd.DataFrame, uses_to_remove: list):
 
 def read_existing_uses(typology_merged):
     existing_uses = set([leaf for tree in typology_merged[typology_use_columns()].values for leaf in tree])
-    valid_use_types = ["SINGLE_RES", "MULTI_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL", "GYM", "SCHOOL",
-                       "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL", "OFFICE", "MUSEUM", "SERVERROOM",
-                       "SWIMMING", "UNIVERSITY", "COOLROOM", "MULTI_RES_2040"]  # TODO: config?
+    valid_use_types = ["SINGLE_RES", "MULTI_RES", "SECONDARY_RES", "RETAIL", "NONE", "HOSPITAL", "INDUSTRIAL", "GYM",
+                       "SCHOOL", "PARKING", "LIBRARY", "FOODSTORE", "RESTAURANT", "HOTEL", "OFFICE", "MUSEUM",
+                       "SERVERROOM", "SWIMMING", "UNIVERSITY", "COOLROOM", "MULTI_RES_2040"]  # TODO: config?
     assert all([True if use in valid_use_types else False for use in existing_uses])  # check valid uses
     return existing_uses
 
