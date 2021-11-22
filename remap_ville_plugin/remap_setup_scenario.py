@@ -3,6 +3,7 @@ Initialize a new scenario based on a old scenario.
 """
 import os
 import shutil
+import geopandas as gpd
 
 import cea.config
 import cea.inputlocator
@@ -44,7 +45,7 @@ def main(config):
     urban_transformation.main(config)
 
     # modify dbf
-    print(f"Modifying building properties in... {year}")
+    print(f"Modifying building preperties in... {year}")
     # copy air conditioning and supply system
     copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
     copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
