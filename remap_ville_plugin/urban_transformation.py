@@ -105,28 +105,21 @@ def main(config):
     overview["gfa_per_use_future_target"] = gfa_per_use_future_target.astype(int)
     overview["gfa_per_use_additional_required_target"] = gfa_per_use_additional_required.astype(int)
 
-    ## FINALIZE INPUTS
+    ## Finalize Inputs
     # filter out buildings by use
-    buildings_filtered_out_by_use, typology_untouched_uses = remove_buildings_by_uses(typology_statusquo,
-                                                                                      uses_to_remove=PARAMS[
-                                                                                          'USES_UNTOUCH'])
-    # keep old buildings unchanged
-    buildings_filtered_out_by_age = filter_buildings_by_year(
-        buildings_filtered_out_by_use,
-        year=PARAMS["preserve_buildings_built_before"] + 1,
-        less_than=True
-    ).copy()
+    typology_kept_uses, typology_untouched_uses = remove_buildings_by_uses(typology_statusquo,
+                                                                           uses_to_remove=PARAMS['USES_UNTOUCH'])
+    # filter out buildings by year
+    typology_preserved_year, typology_after_year = filter_buildings_by_year(typology_kept_uses,
+                                                                    year=PARAMS["preserve_buildings_built_before"])
+    # final typology_input to be optimized
+    typology_input = typology_after_year.copy()
 
-    buildings_kept = filter_buildings_by_year(
-        buildings_filtered_out_by_use,
-        year=PARAMS["preserve_buildings_built_before"],
-        less_than=False
-    ).copy()
     # set constraints
-    range_additional_floors_per_building = calc_range_additional_floors_per_building(buildings_kept)
+    range_additional_floors_per_building = calc_range_additional_floors_per_building(typology_input)
     possible_uses_per_cityzone = update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target)
     # create random scenarios
-    scenarios = amap.randomize_scenarios(typology_merged=buildings_kept, usetype_constraints=possible_uses_per_cityzone,
+    scenarios = amap.randomize_scenarios(typology_merged=typology_input, usetype_constraints=possible_uses_per_cityzone,
                                          use_columns=typology_use_columns(), scenario_count=PARAMS['scenario_count'])
 
     ## OPTIMIZE ALL SCENARIOS
@@ -144,7 +137,7 @@ def main(config):
     ## write typology.dbf and zone.shp with the best scenario
     best_typology_df = scenarios[best_scenario].copy()
     # add back those buildings initially filtered out
-    best_typology_df = best_typology_df.append(buildings_filtered_out_by_age, sort=True)
+    best_typology_df = best_typology_df.append(typology_preserved_year, sort=True)
     best_typology_df = best_typology_df.append(typology_planned, sort=True)
     best_typology_df = best_typology_df.append(typology_untouched_uses, sort=True)
     result_add_floors = amap.parse_milp_solution(optimizations[best_scenario]["solution"])
@@ -425,14 +418,12 @@ def calc_range_additional_floors_per_building(typology_status_quo):
     return range_additional_floors_per_building
 
 
-def filter_buildings_by_year(typology_merged: pd.DataFrame, year: int, less_than: bool = True):
-    if "YEAR" not in typology_merged:
+def filter_buildings_by_year(typology_df: pd.DataFrame, year: int):
+    if "YEAR" not in typology_df:
         raise KeyError("provided data frame is missing the column 'YEAR'")
-    if less_than:
-        op = operator.lt
-    else:
-        op = operator.gt
-    return typology_merged[op(typology_merged.YEAR, year)]
+    typology_before_year = typology_df[operator.lt(typology_df.YEAR, year + 1)]
+    typology_after_year = typology_df[operator.gt(typology_df.YEAR, year)]
+    return typology_before_year, typology_after_year
 
 
 def calc_gfa_per_use_future_target(future_required_additional_res_gfa,
