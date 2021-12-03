@@ -183,6 +183,7 @@ def find_optimum_scenario(
         optimizations: Dict[str, Dict],
         target: float,
 ):
+    print("getting the best scenario...")
     errors = dict()
     minimum = None
     for i, optimization in enumerate(optimizations):

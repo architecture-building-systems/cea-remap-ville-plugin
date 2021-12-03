@@ -105,7 +105,7 @@ def main(config):
     overview["gfa_per_use_future_target"] = gfa_per_use_future_target.astype(int)
     overview["gfa_per_use_additional_target"] = gfa_per_use_additional.astype(int)
 
-    ## Finalize Inputs
+    ## 3. Finalize Inputs
     # filter out buildings by use
     typology_kept_uses, typology_untouched_uses = remove_buildings_by_uses(typology_statusquo,
                                                                            uses_to_remove=PARAMS['USES_UNTOUCH'])
@@ -114,37 +114,36 @@ def main(config):
                                                                     year=PARAMS["preserve_buildings_built_before"])
     # final typology_input to be optimized
     typology_input = typology_after_year.copy()
-
     # set constraints
     range_additional_floors_per_building = calc_range_additional_floors_per_building(typology_input)
     possible_uses_per_cityzone = update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target)
     # create random scenarios
     scenarios = amap.randomize_scenarios(typology_merged=typology_input, usetype_constraints=possible_uses_per_cityzone,
                                          use_columns=typology_use_columns(), scenario_count=PARAMS['scenario_count'])
-
-    ## OPTIMIZE ALL SCENARIOS
+    ## 4. Optimize Urban Transformation
     metrics, optimizations = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
                                                     gfa_per_use_additional_target, gfa_total_additional_target)
-
-    # find the best scenario
-    print("getting the best scenario...")
-    best_scenario, scenario_errors = amap.find_optimum_scenario(
-        optimizations=optimizations,
-        target=gfa_total_additional_target
-    )
+    ## 5. Reconstruct District with the Best Scenario
+    best_scenario, scenario_errors = amap.find_optimum_scenario(optimizations=optimizations,
+                                                                target=gfa_total_additional_target)
     overview['result_add_gfa_per_use'] = metrics[best_scenario]['gfa_per_use'].loc['result']
-
-    ## write typology.dbf and zone.shp with the best scenario
     best_typology_df = scenarios[best_scenario].copy()
-    # add back those buildings initially filtered out
+    # add back those buildings that got filtered out
     best_typology_df = best_typology_df.append(typology_preserved_year, sort=True)
     best_typology_df = best_typology_df.append(typology_planned, sort=True)
     best_typology_df = best_typology_df.append(typology_untouched_uses, sort=True)
+    # get floors added per building
     result_add_floors = amap.parse_milp_solution(optimizations[best_scenario]["solution"])
     save_best_scenario(best_typology_df, result_add_floors, optimizations[best_scenario]['building_to_sub_building'],
                        typology_statusquo, new_locator)
 
-    # get updated data
+    ## 6. Check results and save overview_df
+    save_updated_typology_to_overview(new_locator, new_scenario_name, overview)
+
+    return
+
+
+def save_updated_typology_to_overview(new_locator, new_scenario_name, overview):
     prop_geometry = get_prop_geometry(new_locator)
     typology_updated = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name', drop=False)
     typology_updated = typology_updated.merge(prop_geometry, left_index=True, right_on='Name')
@@ -157,7 +156,6 @@ def main(config):
     overview_df = pd.DataFrame(overview)
     overview_df = pd.concat([overview_df, use_count_df], axis=1)
     overview_df.to_csv(os.path.join(new_locator.get_input_folder(), new_scenario_name + "_overview.csv"))
-
     return
 
 
