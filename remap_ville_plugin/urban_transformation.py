@@ -99,11 +99,11 @@ def main(config):
     typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
                                                      typology_statusquo)
 
-    # get target_add_gfa_per_use
-    target_add_gfa_per_use = gfa_per_use_additional_reuqired.astype(int).to_dict()
-    total_additional_gfa_target = gfa_per_use_additional_reuqired.sum()
+    # get gfa_per_use_additional_required_target
+    gfa_per_use_additional_required_target = gfa_per_use_additional_reuqired.astype(int).to_dict()
+    total_gfa_additional_required_target = gfa_per_use_additional_reuqired.sum()
     overview["gfa_per_use_future_target"] = gfa_per_use_future_target.astype(int)
-    overview["target_add_gfa_per_use"] = gfa_per_use_additional_reuqired.astype(int)
+    overview["gfa_per_use_additional_required_target"] = gfa_per_use_additional_reuqired.astype(int)
 
     ## FINALIZE INPUTS
     # filter out buildings by use
@@ -131,13 +131,13 @@ def main(config):
 
     ## OPTIMIZE ALL SCENARIOS
     metrics, optimizations = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
-                                                    target_add_gfa_per_use, total_additional_gfa_target)
+                                                    gfa_per_use_additional_required_target, total_gfa_additional_required_target)
 
     # find the best scenario
     print("getting the best scenario...")
     best_scenario, scenario_errors = amap.find_optimum_scenario(
         optimizations=optimizations,
-        target=total_additional_gfa_target
+        target=total_gfa_additional_required_target
     )
     overview['result_add_gfa_per_use'] = metrics[best_scenario]['gfa_per_use'].loc['result']
 
@@ -160,7 +160,7 @@ def main(config):
     overview['gfa_per_use_updated'] = gfa_per_use_type_updated.astype(int)
     overview['gfa_per_ratio_updated'] = round(gfa_per_use_type_updated / gfa_per_use_type_updated.sum(), 5)
     overview['actual_add_gfa_per_use'] = overview['gfa_per_use_updated'] - overview['gfa_per_use_statusquo']
-    overview['diff_add_gfa_per_use'] = overview['target_add_gfa_per_use'] - overview['actual_add_gfa_per_use']
+    overview['diff_add_gfa_per_use'] = overview['gfa_per_use_additional_required_target'] - overview['actual_add_gfa_per_use']
     overview_df = pd.DataFrame(overview)
     overview_df = pd.concat([overview_df, use_count_df], axis=1)
     overview_df.to_csv(os.path.join(new_locator.get_input_folder(), new_scenario_name + "_overview.csv"))
