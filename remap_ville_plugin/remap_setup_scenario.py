@@ -22,18 +22,7 @@ __status__ = "Production"
 
 def main(config):
     ## 1. Initialize new scenario
-    old_scenario_name = config.scenario_name
-    old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    config, new_scenario_name, urban_development_scenario, year = update_config(config)
-    new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    initialize_input_folder(config, new_locator)
-    print(f"Initializing new scenario: {new_scenario_name} base on {old_scenario_name}")
-    # copy files from old_locator to new_locator
-    copy_folder(old_locator.get_building_geometry_folder(), new_locator.get_building_geometry_folder())
-    copy_folder(old_locator.get_terrain_folder(), new_locator.get_terrain_folder())
-    os.mkdir(new_locator.get_building_properties_folder())
-    copy_file(old_locator.get_building_typology(), new_locator.get_building_typology())
-    copy_file(old_locator.get_building_architecture(), new_locator.get_building_architecture())
+    config, new_locator, old_locator, urban_development_scenario, year = initialize_new_scenario(config)
 
     ## 2. Urban Transformation
     print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
@@ -49,19 +38,35 @@ def main(config):
     # update air-conditioning according to use
     airconditioning_df = dbf_to_dataframe(new_locator.get_building_air_conditioning()).set_index('Name')
     airconditioning_df = update_air_conditioning_dbf(MULTI_RES_2040, ORIG_RES, OTHER_USES, airconditioning_df)
+    save_dbfs(airconditioning_df, new_locator.get_building_air_conditioning())
     # update supply system according to use
     supply_df = dbf_to_dataframe(new_locator.get_building_supply()).set_index('Name')
     supply_df.loc[:, 'type_cs'] = 'SUPPLY_COOLING_AS1'
+    save_dbfs(supply_df, new_locator.get_building_supply())
     # update architecture for MULTI_RES_2040
     architecture_df = dbf_to_dataframe(new_locator.get_building_architecture()).set_index('Name')
     architecture_df = update_architecture_dbf(MULTI_RES_2040, architecture_df)
-    save_dbfs(airconditioning_df, new_locator.get_building_air_conditioning())
-    save_dbfs(supply_df, new_locator.get_building_supply())
     save_dbfs(architecture_df, new_locator.get_building_architecture())
 
     # TODO: update use_types in the technology folder!!!
 
     return
+
+
+def initialize_new_scenario(config):
+    old_scenario_name = config.scenario_name
+    old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    config, new_scenario_name, urban_development_scenario, year = update_config(config)
+    new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    initialize_input_folder(config, new_locator)
+    print(f"Initializing new scenario: {new_scenario_name} base on {old_scenario_name}")
+    # copy files from old_locator to new_locator
+    copy_folder(old_locator.get_building_geometry_folder(), new_locator.get_building_geometry_folder())
+    copy_folder(old_locator.get_terrain_folder(), new_locator.get_terrain_folder())
+    os.mkdir(new_locator.get_building_properties_folder())
+    copy_file(old_locator.get_building_typology(), new_locator.get_building_typology())
+    copy_file(old_locator.get_building_architecture(), new_locator.get_building_architecture())
+    return config, new_locator, old_locator, urban_development_scenario, year
 
 
 def update_config(config):
