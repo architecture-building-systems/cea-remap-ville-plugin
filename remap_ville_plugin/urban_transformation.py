@@ -90,8 +90,8 @@ def main(config):
     # transform part of SECONDARY_RES to MULTI_RES
     gfa_per_use_additional_reuqired, \
     gfa_per_use_future_target, \
-    typology_statusquo = convert_SECONDARY_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
-                                               typology_statusquo, PARAMS)
+    typology_statusquo = convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
+                                                        typology_statusquo, PARAMS)
 
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
     gfa_per_use_additional_reuqired, \
@@ -193,8 +193,8 @@ def convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_requi
     return gfa_per_use_additional_reuqired, gfa_per_use_future_required_target, typology_statusquo
 
 
-def convert_SECONDARY_RES(gfa_per_use_additional_required, gfa_per_use_future_target,
-                          typology_statusquo, PARAMS):
+def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target,
+                                   typology_statusquo, PARAMS):
     """
     Sample Secondary Residential buildings to convert to Multi-Residential buildings.
     :param gfa_per_use_additional_required:
@@ -204,24 +204,26 @@ def convert_SECONDARY_RES(gfa_per_use_additional_required, gfa_per_use_future_ta
     :return:
     """
     SECONDARY_RES_buildings = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SECONDARY_RES'].index)
+    print(len(SECONDARY_RES_buildings), 'SECONDARY_RES buildings in the district.')
     SECONDARY_RES_gfa = typology_statusquo.loc[SECONDARY_RES_buildings]['GFA_m2'].sum()
-    additional_required_MULTI_RES_gfa = gfa_per_use_additional_required['MULTI_RES']
-    if SECONDARY_RES_gfa > additional_required_MULTI_RES_gfa * 2:
-        results_dict = {}
-        buffer = PARAMS['future_occupant_density'] * 2
+    required_SECONDARY_RES_gfa = gfa_per_use_additional_required['SECONDARY_RES']
+    required_MULTI_RES_gfa = gfa_per_use_additional_required['MULTI_RES']
+    if np.isclose(required_SECONDARY_RES_gfa, 0.0) and SECONDARY_RES_gfa / required_MULTI_RES_gfa > 10:
+        delta_gfa_dict = {}
+        buffer = required_MULTI_RES_gfa * 0.1
         for i in range(1000):
-            num_sampled_buildings = random.randrange(0, len(SECONDARY_RES_buildings)/2)
+            num_sampled_buildings = random.randrange(0, len(SECONDARY_RES_buildings))
             sampled_buildings = random.sample(set(SECONDARY_RES_buildings), num_sampled_buildings)
             sampled_gfa = typology_statusquo.loc[sampled_buildings]['GFA_m2'].sum()
-            delta_gfa = round(sampled_gfa - additional_required_MULTI_RES_gfa, 2)
-            if delta_gfa < buffer and delta_gfa > 0.0:
-                results_dict[delta_gfa] = sampled_buildings
-        buildings_to_MULTI_RES = results_dict[min(results_dict.keys())]
+            delta_gfa = round(required_MULTI_RES_gfa - sampled_gfa, 2)
+            if abs(delta_gfa) < buffer:
+                delta_gfa_dict[delta_gfa] = sampled_buildings
+        buildings_to_MULTI_RES = delta_gfa_dict[min(delta_gfa_dict.keys())]
         print('Converting...', len(buildings_to_MULTI_RES), 'SECONDARY_RES to MULTI_RES')
         typology_statusquo.loc[buildings_to_MULTI_RES, '1ST_USE'] = 'MULTI_RES'
         SECONDARY_to_MULTI_RES_gfa = typology_statusquo.loc[buildings_to_MULTI_RES]['GFA_m2'].sum()
         gfa_per_use_additional_required['MULTI_RES'] = max(
-            additional_required_MULTI_RES_gfa - SECONDARY_to_MULTI_RES_gfa, 0)
+            required_MULTI_RES_gfa - SECONDARY_to_MULTI_RES_gfa, 0)
     else:
         SECONDARY_to_MULTI_RES_gfa = 0.0
     # update targets
