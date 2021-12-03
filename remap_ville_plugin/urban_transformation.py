@@ -91,13 +91,13 @@ def main(config):
     gfa_per_use_additional_reuqired, \
     gfa_per_use_future_target, \
     typology_statusquo = convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
-                                                        typology_statusquo, PARAMS)
+                                                        typology_statusquo)
 
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
     gfa_per_use_additional_reuqired, \
     gfa_per_use_future_target, \
-    typology_statusquo = convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
-                                            typology_statusquo)
+    typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
+                                                     typology_statusquo)
 
     # get target_add_gfa_per_use
     target_add_gfa_per_use = gfa_per_use_additional_reuqired.astype(int).to_dict()
@@ -168,7 +168,7 @@ def main(config):
     return
 
 
-def convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_required_target, typology_statusquo):
+def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo):
     buildings_SINGLE_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SINGLE_RES'].index)
     num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * PARAMS['SINGLE_to_MULTI_RES_ratio'])
     if num_buildings_to_MULTI_RES > 0.0:
@@ -182,25 +182,23 @@ def convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_requi
                 building_gfa * PARAMS["ratio_living_space_to_GFA"] / PARAMS["current_SFH_occupant_density"])
             extra_gfa = building_gfa - num_occupants * (
                     PARAMS["future_occupant_density"] / PARAMS["ratio_living_space_to_GFA"])
-            extra_gfa_from_SINGLE_RES_conversion += extra_gfa
+            extra_gfa_from_SINGLE_RES_conversion += extra_gfa # extra gfa to host additional population
             typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"SINGLE_RES": "MULTI_RES"})
-        gfa_per_use_future_required_target["SINGLE_RES"] = gfa_per_use_future_required_target[
+        gfa_per_use_future_target["SINGLE_RES"] = gfa_per_use_future_target[
                                                                "SINGLE_RES"] - gfa_to_MULTI_RES
-        gfa_per_use_additional_reuqired["MULTI_RES"] = gfa_per_use_additional_reuqired[
+        gfa_per_use_additional_required["MULTI_RES"] = gfa_per_use_additional_required[
                                                            "MULTI_RES"] - extra_gfa_from_SINGLE_RES_conversion
-        assert gfa_per_use_additional_reuqired["MULTI_RES"] > 0.0
+        assert gfa_per_use_additional_required["MULTI_RES"] > 0.0
 
-    return gfa_per_use_additional_reuqired, gfa_per_use_future_required_target, typology_statusquo
+    return gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo
 
 
-def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target,
-                                   typology_statusquo, PARAMS):
+def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo):
     """
     Sample Secondary Residential buildings to convert to Multi-Residential buildings.
     :param gfa_per_use_additional_required:
     :param gfa_per_use_future_target:
     :param typology_statusquo:
-    :param PARAMS:
     :return:
     """
     SECONDARY_RES_buildings = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SECONDARY_RES'].index)
