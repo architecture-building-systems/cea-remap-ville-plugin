@@ -83,27 +83,27 @@ def main(config):
                                                                gfa_per_use_statusquo,
                                                                rel_ratio_to_res_gfa_target)
     # get additional required gfa per use
-    gfa_per_use_additional_required = gfa_per_use_future_target - gfa_per_use_statusquo
-    gfa_per_use_additional_required["MULTI_RES"] = gfa_per_use_additional_required["MULTI_RES"] - gfa_res_planned
-    gfa_per_use_additional_required[gfa_per_use_additional_required < 0] = 0.0 # FIXME: TRANSFORM THE USETYPE THAT IS DIMINISHING
+    gfa_per_use_additional = gfa_per_use_future_target - gfa_per_use_statusquo
+    gfa_per_use_additional["MULTI_RES"] = gfa_per_use_additional["MULTI_RES"] - gfa_res_planned
+    gfa_per_use_additional[gfa_per_use_additional < 0] = 0.0 # FIXME: TRANSFORM THE USETYPE THAT IS DIMINISHING
 
     # transform part of SECONDARY_RES to MULTI_RES
-    gfa_per_use_additional_required, \
+    gfa_per_use_additional, \
     gfa_per_use_future_target, \
-    typology_statusquo = convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target,
+    typology_statusquo = convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional, gfa_per_use_future_target,
                                                         typology_statusquo)
 
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
-    gfa_per_use_additional_required, \
+    gfa_per_use_additional, \
     gfa_per_use_future_target, \
-    typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target,
+    typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional, gfa_per_use_future_target,
                                                      typology_statusquo)
 
-    # get gfa_per_use_additional_required_target
-    gfa_per_use_additional_required_target = gfa_per_use_additional_required.astype(int).to_dict()
-    total_gfa_additional_required_target = gfa_per_use_additional_required.sum()
+    # get gfa_per_use_additional_target
+    gfa_per_use_additional_target = gfa_per_use_additional.astype(int).to_dict()
+    gfa_total_additional_target = gfa_per_use_additional.sum()
     overview["gfa_per_use_future_target"] = gfa_per_use_future_target.astype(int)
-    overview["gfa_per_use_additional_required_target"] = gfa_per_use_additional_required.astype(int)
+    overview["gfa_per_use_additional_target"] = gfa_per_use_additional.astype(int)
 
     ## Finalize Inputs
     # filter out buildings by use
@@ -124,13 +124,13 @@ def main(config):
 
     ## OPTIMIZE ALL SCENARIOS
     metrics, optimizations = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
-                                                    gfa_per_use_additional_required_target, total_gfa_additional_required_target)
+                                                    gfa_per_use_additional_target, gfa_total_additional_target)
 
     # find the best scenario
     print("getting the best scenario...")
     best_scenario, scenario_errors = amap.find_optimum_scenario(
         optimizations=optimizations,
-        target=total_gfa_additional_required_target
+        target=gfa_total_additional_target
     )
     overview['result_add_gfa_per_use'] = metrics[best_scenario]['gfa_per_use'].loc['result']
 
@@ -153,7 +153,7 @@ def main(config):
     overview['gfa_per_use_updated'] = gfa_per_use_type_updated.astype(int)
     overview['gfa_per_ratio_updated'] = round(gfa_per_use_type_updated / gfa_per_use_type_updated.sum(), 5)
     overview['actual_add_gfa_per_use'] = overview['gfa_per_use_updated'] - overview['gfa_per_use_statusquo']
-    overview['diff_add_gfa_per_use'] = overview['gfa_per_use_additional_required_target'] - overview['actual_add_gfa_per_use']
+    overview['diff_add_gfa_per_use'] = overview['gfa_per_use_additional_target'] - overview['actual_add_gfa_per_use']
     overview_df = pd.DataFrame(overview)
     overview_df = pd.concat([overview_df, use_count_df], axis=1)
     overview_df.to_csv(os.path.join(new_locator.get_input_folder(), new_scenario_name + "_overview.csv"))
