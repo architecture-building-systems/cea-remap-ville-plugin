@@ -21,25 +21,21 @@ __status__ = "Production"
 
 
 def main(config):
-    district_archetype = config.remap_ville_scenarios.district_archetype
-    year = config.remap_ville_scenarios.year
-    urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
-
+    ## 1. Initialize new scenario
     old_scenario_name = config.scenario_name
     old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    new_scenario_name = f"{year}_{urban_development_scenario}"
-    config.scenario_name = new_scenario_name
+    config, new_scenario_name, urban_development_scenario, year = update_config(config)
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     initialize_input_folder(config, new_locator)
     print(f"Initializing new scenario: {new_scenario_name} base on {old_scenario_name}")
-    # copy files
+    # copy files from old_locator to new_locator
     copy_folder(old_locator.get_building_geometry_folder(), new_locator.get_building_geometry_folder())
     copy_folder(old_locator.get_terrain_folder(), new_locator.get_terrain_folder())
     os.mkdir(new_locator.get_building_properties_folder())
     copy_file(old_locator.get_building_typology(), new_locator.get_building_typology())
     copy_file(old_locator.get_building_architecture(), new_locator.get_building_architecture())
 
-    # Urban Transformation
+    ## 2. Urban Transformation
     print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
     urban_transformation.main(config)
 
@@ -66,6 +62,15 @@ def main(config):
     # TODO: update use_types in the technology folder!!!
 
     return
+
+
+def update_config(config):
+    year = config.remap_ville_scenarios.year
+    urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
+    new_scenario_name = f"{year}_{urban_development_scenario}"
+    config.scenario_name = new_scenario_name
+    return config, new_scenario_name, urban_development_scenario, year
+
 
 def save_dbfs(dbf, path_to_save_dbf):
     print('saving...', path_to_save_dbf)

@@ -17,6 +17,7 @@ from cea.demand.building_properties import calc_useful_areas
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
 from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns, count_usetype
 import remap_ville_plugin.area_optimization_mapper as amap
+from remap_ville_plugin.remap_setup_scenario import update_config
 
 __author__ = "Anastasiya Popova, Shanshan Hsieh"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -46,23 +47,21 @@ PARAMS = {
 
 
 def main(config):
-    district_archetype = config.remap_ville_scenarios.district_archetype
-    year = config.remap_ville_scenarios.year
-    urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
-
-    new_scenario_name = f"{year}_{urban_development_scenario}"
-    config.scenario_name = new_scenario_name
+    config, new_scenario_name, urban_development_scenario, year = update_config(config)
+    ## Save PARAMS
     with open(os.path.join(config.scenario, str(new_scenario_name) + "_PARAMS.json"), "w") as fp:
         json.dump(PARAMS, fp)
+
+    ## 1. Gather input data
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    ## gather input data
     typology_merged = get_sample_data(new_locator)
     existing_uses = read_existing_uses(typology_merged)
-    ## get typology_statusquo and typology_planned (dont touch)
+
+    # 1.1 get typology_statusquo and typology_planned (wont touch)
     typology_statusquo = typology_merged.copy()
     typology_statusquo, typology_planned = remove_buildings_by_uses(typology_statusquo,
                                                                     uses_to_remove=[PARAMS['MULTI_RES_PLANNED']])
-    ## get overview
+    # 1.2 get overview
     gfa_per_use_statusquo = calc_gfa_per_use(typology_statusquo, "GFA_m2")
     gfa_per_use_planned = calc_gfa_per_use(typology_planned, "GFA_m2") if typology_planned else None
     gfa_res_planned = gfa_per_use_planned[PARAMS['MULTI_RES_PLANNED']] if gfa_per_use_planned else 0.0
@@ -73,7 +72,7 @@ def main(config):
 
     # TODO: KEEP "FUTURE RESERVED AREA" (ONLY FOOTPRINTS BUT NO HEIGHT) TO BUILD MULTI_RES
 
-    ## SET TARGET GFA RATIOS
+    ## 2. Set Targets
     # get relative ratio
     # total_additional_gfa_target
     gfa_per_use_statusquo = combine_MULTI_RES_gfa(gfa_per_use_statusquo)  # FIXME: redundant?
