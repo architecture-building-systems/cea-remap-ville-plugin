@@ -56,21 +56,20 @@ def main(config):
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     typology_merged = get_sample_data(new_locator)
     existing_uses = read_existing_uses(typology_merged)
-
-    # 1.1 get typology_statusquo and typology_planned (wont touch)
+    # exclude planned buildings
     typology_statusquo = typology_merged.copy()
     typology_statusquo, typology_planned = remove_buildings_by_uses(typology_statusquo,
                                                                     uses_to_remove=[PARAMS['MULTI_RES_PLANNED']])
-    # 1.2 get overview
     gfa_per_use_statusquo = calc_gfa_per_use(typology_statusquo, "GFA_m2")
     gfa_per_use_planned = calc_gfa_per_use(typology_planned, "GFA_m2") if typology_planned else None
     gfa_res_planned = gfa_per_use_planned[PARAMS['MULTI_RES_PLANNED']] if gfa_per_use_planned else 0.0
+    # get overview
     overview = {}
     overview["gfa_per_use_statusquo"] = gfa_per_use_statusquo.astype(int)
     overview["gfa_ratio_per_use_statusquo"] = round(gfa_per_use_statusquo / gfa_per_use_statusquo.sum(), 5)
     overview["gfa_per_use_planned"] = gfa_per_use_planned.astype(int) if gfa_per_use_planned else 0.0
 
-    # TODO: KEEP "FUTURE RESERVED AREA" (ONLY FOOTPRINTS BUT NO HEIGHT) TO BUILD MULTI_RES
+    # TODO: KEEP "FUTURE RESERVED AREA" (ONLY FOOTPRINTS BUT NO HEIGHT) TO BUILD MULTI_RES (Altstetten)
 
     ## 2. Set Targets
     # get rel_ratio_to_res_gfa_target
@@ -93,7 +92,7 @@ def main(config):
     typology_statusquo = convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional, gfa_per_use_future_target,
                                                         typology_statusquo)
 
-    # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
+    # transform parts of SINGLE_RES to MULTI_RES
     gfa_per_use_additional, \
     gfa_per_use_future_target, \
     typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional, gfa_per_use_future_target,
