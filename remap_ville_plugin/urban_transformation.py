@@ -83,27 +83,27 @@ def main(config):
                                                                gfa_per_use_statusquo,
                                                                rel_ratio_to_res_gfa_target)
     # get additional required gfa per use
-    gfa_per_use_additional_reuqired = gfa_per_use_future_target - gfa_per_use_statusquo
-    gfa_per_use_additional_reuqired["MULTI_RES"] = gfa_per_use_additional_reuqired["MULTI_RES"] - gfa_res_planned
-    gfa_per_use_additional_reuqired[gfa_per_use_additional_reuqired < 0] = 0.0 # FIXME: TRANSFORM THE USETYPE THAT IS DIMINISHING
+    gfa_per_use_additional_required = gfa_per_use_future_target - gfa_per_use_statusquo
+    gfa_per_use_additional_required["MULTI_RES"] = gfa_per_use_additional_required["MULTI_RES"] - gfa_res_planned
+    gfa_per_use_additional_required[gfa_per_use_additional_required < 0] = 0.0 # FIXME: TRANSFORM THE USETYPE THAT IS DIMINISHING
 
     # transform part of SECONDARY_RES to MULTI_RES
-    gfa_per_use_additional_reuqired, \
+    gfa_per_use_additional_required, \
     gfa_per_use_future_target, \
-    typology_statusquo = convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
+    typology_statusquo = convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target,
                                                         typology_statusquo)
 
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
-    gfa_per_use_additional_reuqired, \
+    gfa_per_use_additional_required, \
     gfa_per_use_future_target, \
-    typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
+    typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target,
                                                      typology_statusquo)
 
     # get gfa_per_use_additional_required_target
-    gfa_per_use_additional_required_target = gfa_per_use_additional_reuqired.astype(int).to_dict()
-    total_gfa_additional_required_target = gfa_per_use_additional_reuqired.sum()
+    gfa_per_use_additional_required_target = gfa_per_use_additional_required.astype(int).to_dict()
+    total_gfa_additional_required_target = gfa_per_use_additional_required.sum()
     overview["gfa_per_use_future_target"] = gfa_per_use_future_target.astype(int)
-    overview["gfa_per_use_additional_required_target"] = gfa_per_use_additional_reuqired.astype(int)
+    overview["gfa_per_use_additional_required_target"] = gfa_per_use_additional_required.astype(int)
 
     ## FINALIZE INPUTS
     # filter out buildings by use
