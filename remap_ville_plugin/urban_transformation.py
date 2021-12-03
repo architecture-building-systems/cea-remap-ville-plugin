@@ -73,12 +73,11 @@ def main(config):
     # TODO: KEEP "FUTURE RESERVED AREA" (ONLY FOOTPRINTS BUT NO HEIGHT) TO BUILD MULTI_RES
 
     ## 2. Set Targets
-    # get relative ratio
-    # total_additional_gfa_target
-    gfa_per_use_statusquo = combine_MULTI_RES_gfa(gfa_per_use_statusquo)  # FIXME: redundant?
+    # get rel_ratio_to_res_gfa_target
+    gfa_per_use_statusquo = combine_MULTI_RES_gfa(gfa_per_use_statusquo)  # FIXME: redundant since remove_buildings_by_uses
     gfa_per_use_statusquo, rel_ratio_to_res_gfa_target = calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, config)
     # get future required residential gfa
-    future_required_additional_res_gfa = calc_additional_requied_residential_gfa(PARAMS)
+    future_required_additional_res_gfa = calc_future_required_additional_res_gfa(PARAMS)
     # calculate future required gfa per use
     gfa_per_use_future_required_target = calc_future_required_gfa_per_use(future_required_additional_res_gfa,
                                                                           gfa_per_use_statusquo,
@@ -433,12 +432,13 @@ def filter_buildings_by_year(typology_merged: pd.DataFrame, year: int, less_than
 def calc_future_required_gfa_per_use(future_required_additional_res_gfa,
                                      gfa_per_use_statusquo, rel_ratio_to_res_gfa_target):
     future_required_res_gfa = (future_required_additional_res_gfa + gfa_per_use_statusquo.filter(like="_RES").sum())
+    # write future required gfa for all use types
     future_required_gfa_dict = dict()
     for use_type in rel_ratio_to_res_gfa_target.index:
         if use_type == "SINGLE_RES":
             future_required_gfa_dict[use_type] = gfa_per_use_statusquo[use_type]  # unchanged
         elif use_type == "MULTI_RES":
-            future_required_gfa_dict[use_type] = future_required_additional_res_gfa + gfa_per_use_statusquo[use_type]
+            future_required_gfa_dict[use_type] = gfa_per_use_statusquo[use_type] + future_required_additional_res_gfa
         else:
             future_required_gfa_dict.update(
                 {use_type: future_required_res_gfa * rel_ratio_to_res_gfa_target[use_type]})
@@ -446,9 +446,9 @@ def calc_future_required_gfa_per_use(future_required_additional_res_gfa,
     return future_required_gfa_per_use
 
 
-def calc_additional_requied_residential_gfa(PARAMS):
-    future_required_additional_res_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
-    future_required_additional_res_gfa = future_required_additional_res_living_space / PARAMS[
+def calc_future_required_additional_res_gfa(PARAMS):
+    future_required_additional_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
+    future_required_additional_res_gfa = future_required_additional_living_space / PARAMS[
         'ratio_living_space_to_GFA']
     return future_required_additional_res_gfa
 
@@ -457,33 +457,35 @@ def calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, config):
     """
     1. read target ratio
     2. update rel_ratio_to_res_gfa for use that exists but not specified in target
+    3. expand use types in gfa_per_use_statusquo according to rel_ratio_to_res_gfa
     :param gfa_per_use_statusquo: in m2
     :return:
     """
     gfa_per_use_statusquo_in = gfa_per_use_statusquo.copy()
     # read target ratio
     rel_ratio_to_res_gfa_target = read_mapping_use_ratio(config)
-    # unify columns in target_rel_ratios and gfa_per_use_statusquo
+    # calculate rel_ratio_to_res_gfa_statusquo
     zero_series = pd.DataFrame(0.0, index=range(1), columns=rel_ratio_to_res_gfa_target.index).loc[0]
     gfa_per_use_statusquo = zero_series.combine(gfa_per_use_statusquo, max)  # TODO: redundant?
     rel_ratio_to_res_gfa_statusquo = (gfa_per_use_statusquo / gfa_per_use_statusquo.filter(like='_RES').sum())
-    # update rel_ratio_to_res_gfa for use that exists but not specified in target
+    ## Update rel_ratio_to_res_gfa_target
     for use, target_val in rel_ratio_to_res_gfa_target.items():
         if np.isclose(target_val, 0.0) and rel_ratio_to_res_gfa_statusquo[use] > 0:
-            # if not required in target, keep existing uses in status quo
+            # if not specified in target, keep rel_ratio in status quo
             rel_ratio_to_res_gfa_target[use] = rel_ratio_to_res_gfa_statusquo[use]
         else:
             rel_ratio_to_res_gfa_target[use] = target_val
     # drop uses with zero ratio
     rel_ratio_to_res_gfa_target = rel_ratio_to_res_gfa_target[rel_ratio_to_res_gfa_target > 0.0]
-    gfa_per_use_statusquo = gfa_per_use_statusquo.loc[rel_ratio_to_res_gfa_target.index]  # get relevant uses
+    # expand gfa_per_use_statusquo with all use types
+    gfa_per_use_statusquo = gfa_per_use_statusquo.loc[rel_ratio_to_res_gfa_target.index]
     assert np.isclose(gfa_per_use_statusquo_in.sum(), gfa_per_use_statusquo.sum())  # make sure total gfa is unchanged
     return gfa_per_use_statusquo, rel_ratio_to_res_gfa_target
 
 
 def read_mapping_use_ratio(config):
     """
-    read numbers from table
+    read numbers from mapping_BUILDING_USE_RATIO.xlsx
     :return:
     """
     district_archetype = config.remap_ville_scenarios.district_archetype
@@ -499,6 +501,11 @@ def read_mapping_use_ratio(config):
 
 
 def combine_MULTI_RES_gfa(gfa_per_use):
+    """
+    combine MULTI_RES and MULTI_RES_2040
+    :param gfa_per_use:
+    :return:
+    """
     MULTI_RES_gfa_sum = gfa_per_use.filter(like='MULTI_RES').sum()
     gfa_per_use = gfa_per_use.drop(gfa_per_use.filter(like="MULTI_RES").index)
     gfa_per_use["MULTI_RES"] = MULTI_RES_gfa_sum
