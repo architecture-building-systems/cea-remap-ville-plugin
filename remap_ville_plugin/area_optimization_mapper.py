@@ -143,16 +143,17 @@ def detailed_result_metrics(
         # calculate errors
         abs_error, rel_error = calculate_result_metrics(solution, target, sub_footprint_area)
         for use in result_add_gfa_per_use:
-            print("use [%s] actual [%.1f] vs. target [%.1f]" % (
-            use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
-            use_abs_error = abs(target_add_gfa_per_use[use] - result_add_gfa_per_use[use])
-            try:
-                use_rel_error = use_abs_error / target_add_gfa_per_use[use]
-            except ZeroDivisionError as e:
-                use_rel_error = 0.0
-            print("    abs. error [%.1f]\n    rel. error [%.4f]" % (use_abs_error, use_rel_error))
-            metrics[use] = {"result": int(result_add_gfa_per_use[use]),
-                            "target": int(target_add_gfa_per_use[use])}
+            if target_add_gfa_per_use[use] > 0:
+                print("use [%s] actual [%.1f] vs. target [%.1f]" % (
+                use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
+                use_abs_error = abs(target_add_gfa_per_use[use] - result_add_gfa_per_use[use])
+                try:
+                    use_rel_error = use_abs_error / target_add_gfa_per_use[use]
+                except ZeroDivisionError as e:
+                    use_rel_error = 0.0
+                print("    abs. error [%.1f]; rel. error [%.3f]" % (use_abs_error, use_rel_error))
+                metrics[use] = {"result": int(result_add_gfa_per_use[use]),
+                                "target": int(target_add_gfa_per_use[use])}
     else:
         abs_error = 1e20
         rel_error = 1e20
