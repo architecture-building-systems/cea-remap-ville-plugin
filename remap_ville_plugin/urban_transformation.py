@@ -79,32 +79,30 @@ def main(config):
     # get future required residential gfa
     future_required_additional_res_gfa = calc_future_required_additional_res_gfa(PARAMS)
     # calculate future required gfa per use
-    gfa_per_use_future_required_target = calc_future_required_gfa_per_use(future_required_additional_res_gfa,
-                                                                          gfa_per_use_statusquo,
-                                                                          rel_ratio_to_res_gfa_target)
-
-    ## calculate target_add_gfa_per_use
-    # additional gfa per use
-    gfa_per_use_additional_reuqired = gfa_per_use_future_required_target - gfa_per_use_statusquo
+    gfa_per_use_future_target = calc_gfa_per_use_future_target(future_required_additional_res_gfa,
+                                                               gfa_per_use_statusquo,
+                                                               rel_ratio_to_res_gfa_target)
+    # get additional required gfa per use
+    gfa_per_use_additional_reuqired = gfa_per_use_future_target - gfa_per_use_statusquo
     gfa_per_use_additional_reuqired["MULTI_RES"] = gfa_per_use_additional_reuqired["MULTI_RES"] - gfa_res_planned
-    gfa_per_use_additional_reuqired[gfa_per_use_additional_reuqired < 0] = 0.0
+    gfa_per_use_additional_reuqired[gfa_per_use_additional_reuqired < 0] = 0.0 # FIXME: TRANSFORM THE USETYPE THAT IS DIMINISHING
 
     # transform part of SECONDARY_RES to MULTI_RES
     gfa_per_use_additional_reuqired, \
-    gfa_per_use_future_required_target, \
-    typology_statusquo = convert_SECONDARY_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_required_target,
+    gfa_per_use_future_target, \
+    typology_statusquo = convert_SECONDARY_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
                                                typology_statusquo, PARAMS)
 
     # transform parts of SINGLE_RES to MULTI_RES # FIXME: maybe this should be done earlier?
     gfa_per_use_additional_reuqired, \
-    gfa_per_use_future_required_target, \
-    typology_statusquo = convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_required_target,
+    gfa_per_use_future_target, \
+    typology_statusquo = convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_target,
                                             typology_statusquo)
 
-    # update target_add_gfa_per_use
+    # get target_add_gfa_per_use
     target_add_gfa_per_use = gfa_per_use_additional_reuqired.astype(int).to_dict()
     total_additional_gfa_target = gfa_per_use_additional_reuqired.sum()
-    overview["gfa_per_use_future_required_target"] = gfa_per_use_future_required_target.astype(int)
+    overview["gfa_per_use_future_target"] = gfa_per_use_future_target.astype(int)
     overview["target_add_gfa_per_use"] = gfa_per_use_additional_reuqired.astype(int)
 
     ## FINALIZE INPUTS
@@ -195,33 +193,41 @@ def convert_SINGLE_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_requi
     return gfa_per_use_additional_reuqired, gfa_per_use_future_required_target, typology_statusquo
 
 
-def convert_SECONDARY_RES(gfa_per_use_additional_reuqired, gfa_per_use_future_required_target,
+def convert_SECONDARY_RES(gfa_per_use_additional_required, gfa_per_use_future_target,
                           typology_statusquo, PARAMS):
-    buildings_SECONDARY_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SECONDARY_RES'].index)
-    SECONDARY_gfa = typology_statusquo.loc[buildings_SECONDARY_RES]['GFA_m2'].sum()
-    additional_required_MULTI_RES_gfa = gfa_per_use_additional_reuqired['MULTI_RES']
-    if SECONDARY_gfa > additional_required_MULTI_RES_gfa * 2:
+    """
+    Sample Secondary Residential buildings to convert to Multi-Residential buildings.
+    :param gfa_per_use_additional_required:
+    :param gfa_per_use_future_target:
+    :param typology_statusquo:
+    :param PARAMS:
+    :return:
+    """
+    SECONDARY_RES_buildings = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SECONDARY_RES'].index)
+    SECONDARY_RES_gfa = typology_statusquo.loc[SECONDARY_RES_buildings]['GFA_m2'].sum()
+    additional_required_MULTI_RES_gfa = gfa_per_use_additional_required['MULTI_RES']
+    if SECONDARY_RES_gfa > additional_required_MULTI_RES_gfa * 2:
         results_dict = {}
+        buffer = PARAMS['future_occupant_density'] * 2
         for i in range(1000):
-            num_sampled_buildings = random.randrange(0, 50)
-            sampled_buildings = random.sample(set(buildings_SECONDARY_RES), num_sampled_buildings)
+            num_sampled_buildings = random.randrange(0, len(SECONDARY_RES_buildings)/2)
+            sampled_buildings = random.sample(set(SECONDARY_RES_buildings), num_sampled_buildings)
             sampled_gfa = typology_statusquo.loc[sampled_buildings]['GFA_m2'].sum()
             delta_gfa = round(sampled_gfa - additional_required_MULTI_RES_gfa, 2)
-            buffer = PARAMS['future_occupant_density'] * 2
             if delta_gfa < buffer and delta_gfa > 0.0:
                 results_dict[delta_gfa] = sampled_buildings
         buildings_to_MULTI_RES = results_dict[min(results_dict.keys())]
         print('Converting...', len(buildings_to_MULTI_RES), 'SECONDARY_RES to MULTI_RES')
         typology_statusquo.loc[buildings_to_MULTI_RES, '1ST_USE'] = 'MULTI_RES'
         SECONDARY_to_MULTI_RES_gfa = typology_statusquo.loc[buildings_to_MULTI_RES]['GFA_m2'].sum()
-        gfa_per_use_additional_reuqired['MULTI_RES'] = max(
+        gfa_per_use_additional_required['MULTI_RES'] = max(
             additional_required_MULTI_RES_gfa - SECONDARY_to_MULTI_RES_gfa, 0)
     else:
         SECONDARY_to_MULTI_RES_gfa = 0.0
     # update targets
-    gfa_per_use_future_required_target["SECONDARY_RES"] = gfa_per_use_future_required_target["SECONDARY_RES"] \
-                                                          - SECONDARY_to_MULTI_RES_gfa
-    return gfa_per_use_additional_reuqired, gfa_per_use_future_required_target, typology_statusquo
+    gfa_per_use_future_target["SECONDARY_RES"] = gfa_per_use_future_target["SECONDARY_RES"] \
+                                                 - SECONDARY_to_MULTI_RES_gfa
+    return gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo
 
 
 def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_building, path_to_input_zone_shape_file,
@@ -429,21 +435,28 @@ def filter_buildings_by_year(typology_merged: pd.DataFrame, year: int, less_than
     return typology_merged[op(typology_merged.YEAR, year)]
 
 
-def calc_future_required_gfa_per_use(future_required_additional_res_gfa,
-                                     gfa_per_use_statusquo, rel_ratio_to_res_gfa_target):
+def calc_gfa_per_use_future_target(future_required_additional_res_gfa,
+                                   gfa_per_use_statusquo, rel_ratio_to_res_gfa_target):
     future_required_res_gfa = (future_required_additional_res_gfa + gfa_per_use_statusquo.filter(like="_RES").sum())
     # write future required gfa for all use types
-    future_required_gfa_dict = dict()
+    gfa_per_use_future_target_dict = dict()
     for use_type in rel_ratio_to_res_gfa_target.index:
+        gfa_future_required = future_required_res_gfa * rel_ratio_to_res_gfa_target[use_type]
+        gfa_statusquo = gfa_per_use_statusquo[use_type]
         if use_type == "SINGLE_RES":
-            future_required_gfa_dict[use_type] = gfa_per_use_statusquo[use_type]  # unchanged
+            gfa_per_use_future_target_dict[use_type] = gfa_statusquo  # unchanged
+        elif use_type == "SECONDARY_RES":
+            rel_ratio = rel_ratio_to_res_gfa_target[use_type]
+            if gfa_per_use_statusquo['SECONDARY_RES'] > gfa_future_required or rel_ratio > 0.2:
+                gfa_per_use_future_target_dict[use_type] = gfa_statusquo
+            else:
+                gfa_per_use_future_target_dict[use_type] = gfa_future_required
         elif use_type == "MULTI_RES":
-            future_required_gfa_dict[use_type] = gfa_per_use_statusquo[use_type] + future_required_additional_res_gfa
+            gfa_per_use_future_target_dict[use_type] = gfa_statusquo + future_required_additional_res_gfa
         else:
-            future_required_gfa_dict.update(
-                {use_type: future_required_res_gfa * rel_ratio_to_res_gfa_target[use_type]})
-    future_required_gfa_per_use = pd.Series(future_required_gfa_dict)
-    return future_required_gfa_per_use
+            gfa_per_use_future_target_dict.update({use_type: gfa_future_required})
+    gfa_per_use_future_target = pd.Series(gfa_per_use_future_target_dict)
+    return gfa_per_use_future_target
 
 
 def calc_future_required_additional_res_gfa(PARAMS):
