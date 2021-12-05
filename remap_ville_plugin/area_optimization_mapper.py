@@ -89,7 +89,7 @@ def optimize(
         sub_building_footprint_area: Dict[str, int],
         building_to_sub_building: Dict[str, List[str]],
         range_additional_floors_per_building: Dict[str, List[int]],
-        per_use_gfa: Dict[str, int],
+        target_add_gfa_per_use: Dict[str, int],
         sub_building_use: Dict[str, str]
 ):
     """TODO: docstring"""
@@ -110,7 +110,7 @@ def optimize(
         lower, upper = range_additional_floors_per_building[building]
         opt_problem += pulp.lpSum([x_additional_floors[i] for i in sub_buildings]) >= lower
         opt_problem += pulp.lpSum([x_additional_floors[i] for i in sub_buildings]) <= upper
-    for use, sub_target in per_use_gfa.items():
+    for use, sub_target in target_add_gfa_per_use.items():
         cond = [
             x_additional_floors[i] * sub_building_footprint_area[i]
             for i in target_variables
