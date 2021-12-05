@@ -120,10 +120,10 @@ def main(config):
     scenarios = amap.randomize_scenarios(typology_merged=typology_input, usetype_constraints=possible_uses_per_cityzone,
                                          use_columns=typology_use_columns(), scenario_count=PARAMS['scenario_count'])
     ## 4. Optimize Urban Transformation
-    metrics, optimizations = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
+    metrics, op_solutions = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
                                                     gfa_per_use_additional_target, gfa_total_additional_target)
     ## 5. Reconstruct District with the Best Scenario
-    best_scenario, scenario_errors = amap.find_optimum_scenario(optimizations=optimizations,
+    best_scenario, scenario_errors = amap.find_optimum_scenario(op_solutions=op_solutions,
                                                                 target=gfa_total_additional_target)
     overview['result_add_gfa_per_use'] = metrics[best_scenario]['gfa_per_use'].loc['result']
     best_typology_df = scenarios[best_scenario].copy()
@@ -132,8 +132,8 @@ def main(config):
     best_typology_df = best_typology_df.append(typology_planned, sort=True)
     best_typology_df = best_typology_df.append(typology_untouched_uses, sort=True)
     # get floors added per building
-    result_add_floors = amap.parse_milp_solution(optimizations[best_scenario]["solution"])
-    save_best_scenario(best_typology_df, result_add_floors, optimizations[best_scenario]['building_to_sub_building'],
+    result_add_floors = amap.parse_milp_solution(op_solutions[best_scenario]["solution"])
+    save_best_scenario(best_typology_df, result_add_floors, op_solutions[best_scenario]['building_to_sub_building'],
                        typology_statusquo, new_locator)
 
     ## 6. Check results and save overview_df
@@ -215,8 +215,7 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
     else:
         SECONDARY_to_MULTI_RES_gfa = 0.0
     # update targets
-    gfa_per_use_future_target["SECONDARY_RES"] = gfa_per_use_future_target["SECONDARY_RES"] \
-                                                 - SECONDARY_to_MULTI_RES_gfa
+    gfa_per_use_future_target["SECONDARY_RES"] = gfa_per_use_future_target["SECONDARY_RES"] - SECONDARY_to_MULTI_RES_gfa
     return gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo
 
 
@@ -312,64 +311,56 @@ def save_updated_typology(path_to_output_typology_file, simulated_typology):
 
 def optimize_all_scenarios(range_additional_floors_per_building, scenarios, target_add_gfa_per_use,
                            total_additional_gfa_target):
-    optimizations = dict()
+    op_solutions = dict()
     metrics = dict()
     for scenario in scenarios:
-        scenario_typology_merged = scenarios[scenario]
-
+        print("scenario [%i], total_additional_gfa_target [%.4f]" % (scenario, total_additional_gfa_target))
+        scenario_typology = scenarios[scenario]
+        # get sub-buildings
         partitions = [[(n, k) for k in m if k != "NONE"]
-                      for n, m in scenario_typology_merged[typology_use_columns()].iterrows()]
-
+                      for n, m in scenario_typology[typology_use_columns()].iterrows()]
         sb = [leaf
               for tree in partitions
               for leaf in tree if leaf != "NONE"]
-
         sub_building_idx = ["%s.%i" % (b[0], i)
                             for i, b in enumerate(sb)]
-
         sub_building_use = {"%s.%i" % (b[0], i): b[1]
                             for i, b in enumerate(sb)}
-
-        print("scenario [%i], total_additional_gfa_target [%.4f]" % (scenario, total_additional_gfa_target))
-
-        footprint_area = scenario_typology_merged.footprint.to_dict()
-        sub_footprint_area = {sb: footprint_area[sb.split(".")[0]]
-                              for sb in sub_building_idx}  # FIXME: check
-
+        footprint_area = scenario_typology.footprint.to_dict()
+        sub_building_footprint_area = {sb: footprint_area[sb.split(".")[0]] for sb in sub_building_idx}
         building_to_sub_building = defaultdict(list)
         for sb in sub_building_idx:
             b, num = sb.split('.')
             building_to_sub_building[b].append(sb)
         print("len of problem [%i]" % len(sub_building_idx))
-
+        # floor area optimization
         solution = amap.optimize(
             total_additional_gfa_target,
             sub_building_idx,
             PARAMS['min_additional_floors'],
             PARAMS['max_additional_floors'],
-            sub_footprint_area,
+            sub_building_footprint_area,
             building_to_sub_building,
             range_additional_floors_per_building,
             target_add_gfa_per_use,
             sub_building_use
         )
-
-        optimizations[scenario] = {
+        print("\n scenario [%i] is-success (if 1): [%i]" % (scenario, solution.sol_status))
+        # save solutions
+        op_solutions[scenario] = {
             "solution": solution,
-            "sub_footprint_area": sub_footprint_area,
+            "sub_building_footprint_area": sub_building_footprint_area,
             "building_to_sub_building": building_to_sub_building
         }
-        print("\n scenario [%i] is-success (if 1): [%i]" % (scenario, solution.sol_status))
-
         detailed_metrics = amap.detailed_result_metrics(
             solution=solution,
             sub_building_use=sub_building_use,
-            sub_footprint_area=sub_footprint_area,
+            sub_building_footprint_area=sub_building_footprint_area,
             target_add_gfa_per_use=target_add_gfa_per_use,
             target=total_additional_gfa_target
         )
         metrics[scenario] = detailed_metrics
-    return metrics, optimizations
+    return metrics, op_solutions
 
 
 def update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target):

@@ -83,12 +83,14 @@ def save_dbfs(dbf, path_to_save_dbf):
     dbf_df.insert(0, 'Name', dbf_df.index)
     dataframe_to_dbf(dbf_df, path_to_save_dbf)
 
+
 def update_architecture_dbf(MULTI_RES_2040, architecture_df):
     MULTI_RES_2040_architecture = [0.82, 0, 0.82, 0.82, 0, 0.4, 0.4, 0.4, 0.4,
                                    'CONSTRUCTION_AS3', 'TIGHTNESS_AS2', 'FLOOR_AS3', 'WALL_AS7', 'FLOOR_AS6',
                                    'ROOF_AS4', 'WALL_AS5', 'WINDOW_AS4', 'SHADING_AS1']
     architecture_df.loc[MULTI_RES_2040] = MULTI_RES_2040_architecture
     return architecture_df
+
 
 def update_air_conditioning_dbf(MULTI_RES_2040, ORIG_RES, OTHER_USES, airconditioning_df):
     # MULTI_RES_2040
@@ -104,6 +106,7 @@ def update_air_conditioning_dbf(MULTI_RES_2040, ORIG_RES, OTHER_USES, airconditi
     airconditioning_df.loc[OTHER_USES, 'type_ctrl'] = 'HVAC_CONTROLLER_AS2'
     airconditioning_df.loc[OTHER_USES, 'type_vent'] = 'HVAC_VENTILATION_AS2'
     return airconditioning_df
+
 
 def get_building_lists_by_use(typology_df):
     _RES = list(typology_df[typology_df['1ST_USE'].str.contains("_RES")].index)
@@ -124,7 +127,7 @@ def copy_folder(src, dst):
 
 def initialize_input_folder(config, new_locator):
     if os.path.exists(config.scenario):
-        raise ValueError((f"{config.scenario} exists, please remove the folder before proceeding."))
+        raise ValueError(f"{config.scenario} exists, please remove the folder before proceeding.")
         # shutil.rmtree(config.scenario)
     os.mkdir(config.scenario)
     os.mkdir(new_locator.get_input_folder())

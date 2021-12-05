@@ -46,7 +46,8 @@ incompetibale_use_types = {
 
 
 def randomize(data_frame: pd.DataFrame, generator: Generator, usetype_constraints: Dict[int, Set],
-              use_columns: List[str], missing_use_name: str = "NONE", city_zone_name: str = "city_zone") -> pd.DataFrame:
+              use_columns: List[str], missing_use_name: str = "NONE",
+              city_zone_name: str = "city_zone") -> pd.DataFrame:
     """
     generates additional building uses through randomization
     given rules by city_zone in 'mapping'
@@ -93,6 +94,9 @@ def optimize(
         sub_building_use: Dict[str, str]
 ):
     """TODO: docstring"""
+    # Initialize opt_problem
+    opt_problem = pulp.LpProblem("maximize_gfa", pulp.LpMaximize)
+    # Define variables
     x_additional_floors = pulp.LpVariable.dict(
         '',
         target_variables,
@@ -100,17 +104,17 @@ def optimize(
         target_variable_max,
         pulp.LpInteger
     )
-
-    opt_problem = pulp.LpProblem("maximize_gfa", pulp.LpMaximize)
+    # Define objective
     opt_problem += pulp.lpSum([x_additional_floors[i] * sub_building_footprint_area[i]
                                for i in target_variables])  # objective
+    # Define constraints
     opt_problem += pulp.lpSum([x_additional_floors[i] * sub_building_footprint_area[i]
-                               for i in target_variables]) <= target
+                               for i in target_variables]) <= target  # close to target GFA
     for building, sub_buildings in building_to_sub_building.items():
-        lower, upper = range_additional_floors_per_building[building]
+        lower, upper = range_additional_floors_per_building[building]  # range of floors
         opt_problem += pulp.lpSum([x_additional_floors[i] for i in sub_buildings]) >= lower
         opt_problem += pulp.lpSum([x_additional_floors[i] for i in sub_buildings]) <= upper
-    for use, sub_target in target_add_gfa_per_use.items():
+    for use, sub_target in target_add_gfa_per_use.items():  # targeted GFA per sub_building
         cond = [
             x_additional_floors[i] * sub_building_footprint_area[i]
             for i in target_variables
@@ -129,7 +133,7 @@ def _var_name(variable: pulp.LpVariable) -> str:
 def detailed_result_metrics(
         solution: pulp.LpProblem,
         sub_building_use: Dict,
-        sub_footprint_area: Dict,
+        sub_building_footprint_area: Dict,
         target_add_gfa_per_use: Dict,
         target: float
 ) -> NoReturn:
@@ -139,13 +143,13 @@ def detailed_result_metrics(
     if result_add_floors:
         # additional floors per use
         for v in result_add_floors:
-            result_add_gfa_per_use[sub_building_use[v]] += sub_footprint_area[v] * result_add_floors[v]
+            result_add_gfa_per_use[sub_building_use[v]] += sub_building_footprint_area[v] * result_add_floors[v]
         # calculate errors
-        abs_error, rel_error = calculate_result_metrics(solution, target, sub_footprint_area)
+        abs_error, rel_error = calculate_result_metrics(solution, target, sub_building_footprint_area)
         for use in result_add_gfa_per_use:
             if target_add_gfa_per_use[use] > 0:
                 print("use [%s] actual [%.1f] vs. target [%.1f]" % (
-                use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
+                    use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
                 use_abs_error = abs(target_add_gfa_per_use[use] - result_add_gfa_per_use[use])
                 try:
                     use_rel_error = use_abs_error / target_add_gfa_per_use[use]
@@ -163,12 +167,12 @@ def detailed_result_metrics(
 def calculate_result_metrics(
         solution: pulp.LpProblem,
         total_addtitional_gfa_target: float,
-        sub_footprint_area: Dict[str, float]
+        sub_building_footprint_area: Dict[str, float]
 ) -> Tuple[float, float]:
     result_additional_floors = parse_milp_solution(solution)
     if result_additional_floors:
         result_additioanl_gfa = sum(
-            sub_footprint_area[v] * result_additional_floors[v] for v in result_additional_floors)
+            sub_building_footprint_area[v] * result_additional_floors[v] for v in result_additional_floors)
         abs_error = abs(total_addtitional_gfa_target - result_additioanl_gfa)
         rel_error = abs_error / total_addtitional_gfa_target
         print("compare total target [%.1f] vs. actual [%.1f]" % (total_addtitional_gfa_target, result_additioanl_gfa))
@@ -179,22 +183,16 @@ def calculate_result_metrics(
     return abs_error, rel_error
 
 
-def find_optimum_scenario(
-        optimizations: Dict[str, Dict],
-        target: float,
-):
-    print("getting the best scenario...")
+def find_optimum_scenario(op_solutions: Dict[str, Dict], target: float):
+    print("getting solutions from the best scenario...")
     errors = dict()
     minimum = None
-    for i, optimization in enumerate(optimizations):
+    for i, op_solution in enumerate(op_solutions):
         print('scenario %i' % i)
         if minimum is None:
             minimum = i
-        abs_error, rel_error = calculate_result_metrics(
-            optimizations[optimization]["solution"],
-            target,
-            optimizations[optimization]["sub_footprint_area"]
-        )
+        abs_error, rel_error = calculate_result_metrics(op_solutions[op_solution]["solution"], target,
+                                                        op_solutions[op_solution]["sub_building_footprint_area"])
         errors[i] = abs_error
         if errors[minimum] > abs_error:
             minimum = i
@@ -219,7 +217,7 @@ def update_zone_shp_file(
         building_to_sub_building: Dict[str, List[str]],
         path_to_input_zone_shape_file: Path,
         path_to_output_zone_shape_file: Path,
-        sub_footprint_area,
+        sub_building_footprint_area,
         sub_building_use
 ):
     """updates floors_ag and height_ag in zone.shp"""
@@ -251,8 +249,8 @@ def update_zone_shp_file(
     result_add_gfa_per_use = {k: 0 for k in set(sub_building_use.values())}
     total_add_area = 0.0
     for v in result_add_floors:
-        result_add_gfa_per_use[sub_building_use[v]] += sub_footprint_area[v] * result_add_floors[v]
-        total_add_area += sub_footprint_area[v] * result_add_floors[v]
+        result_add_gfa_per_use[sub_building_use[v]] += sub_building_footprint_area[v] * result_add_floors[v]
+        total_add_area += sub_building_footprint_area[v] * result_add_floors[v]
 
     calculated_additional_gfa = (zone_shp_updated['floors_ag'] - typology_merged['floors_ag']) * zone_shp_updated.area
 
