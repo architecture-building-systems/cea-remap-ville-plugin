@@ -24,7 +24,7 @@ __maintainer__ = "Anastasiya Popova"
 __email__ = "cea@arch.ethz.ch"
 __status__ = "Production"
 
-incompetibale_use_types = {
+incompatible_use_types = {
     "COOLROOM": ["SINGLE_RES"],
     "FOODSTORE": ["SINGLE_RES"],
     "GYM": ["SINGLE_RES"],
@@ -62,8 +62,8 @@ def randomize(data_frame: pd.DataFrame, generator: Generator, usetype_constraint
         # available_uses_cityzone = set(mapping[1]) # FIXME: bypass reading city_zone_name column
         not_available_uses_building = []
         for use in current_uses:
-            if use in incompetibale_use_types.keys():
-                not_available_uses_building.extend(incompetibale_use_types[use])
+            if use in incompatible_use_types.keys():
+                not_available_uses_building.extend(incompatible_use_types[use])
         available_uses_building = available_uses_cityzone.difference(set(not_available_uses_building))
         choices = list(available_uses_building.difference(set(current_uses)))
         additional = generator.choice(choices, size=how_many_free_uses, replace=False)
@@ -166,16 +166,16 @@ def detailed_result_metrics(
 
 def calculate_result_metrics(
         solution: pulp.LpProblem,
-        total_addtitional_gfa_target: float,
+        total_additional_gfa_target: float,
         sub_building_footprint_area: Dict[str, float]
 ) -> Tuple[float, float]:
     result_additional_floors = parse_milp_solution(solution)
     if result_additional_floors:
-        result_additioanl_gfa = sum(
+        result_additional_gfa = sum(
             sub_building_footprint_area[v] * result_additional_floors[v] for v in result_additional_floors)
-        abs_error = abs(total_addtitional_gfa_target - result_additioanl_gfa)
-        rel_error = abs_error / total_addtitional_gfa_target
-        print("compare total target [%.1f] vs. actual [%.1f]" % (total_addtitional_gfa_target, result_additioanl_gfa))
+        abs_error = abs(total_additional_gfa_target - result_additional_gfa)
+        rel_error = abs_error / total_additional_gfa_target
+        print("compare total target [%.1f] vs. actual [%.1f]" % (total_additional_gfa_target, result_additional_gfa))
         print("total absolute error [%.1f], relative error [%.4f]" % (abs_error, rel_error))
     else:
         abs_error = 1e20
@@ -301,7 +301,7 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
             updated_floor_per_use_col[use_col_dict[i]] = (
                     sub_building_additional_floors + (current_ratio * current_floors))
         if not np.isclose(updated_floors, sum(updated_floor_per_use_col.values())):
-            raise ValueError("total number of floors mis-match excpeted number of floors")
+            raise ValueError("total number of floors mis-match expected number of floors")
         # write update ratio
         for use_col in updated_floor_per_use_col:
             r = updated_floor_per_use_col[use_col] / updated_floors
