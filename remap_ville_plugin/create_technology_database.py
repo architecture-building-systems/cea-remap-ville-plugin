@@ -24,21 +24,21 @@ def main(config):
     urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
 
     locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    database_root = os.path.join(os.path.dirname(__file__), "CH_ReMaP")
-
     folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
     print(f"Creating technology folder for {folder_name}")
 
+    create_input_technology_folder(folder_name, locator)
+
+
+def create_input_technology_folder(folder_name, locator):
+    database_root = os.path.join(os.path.dirname(__file__), "CH_ReMaP")
     print(f"Creating assemblies...")
     copy_assemblies_folder(database_root, locator)
-
     print(f"Creating components...")
     copy_components_folder(database_root, locator)
-
     print(f"Creating construction standards...")
     copy_file(os.path.join(database_root, "archetypes", "CONSTRUCTION_STANDARD_SUMMARY.xlsx"),
               locator.get_database_construction_standards())
-
     print(f"Creating use types...")
     copy_use_types(database_root, folder_name, locator)
 
@@ -73,7 +73,7 @@ def copy_file(src, dst):
         os.makedirs(os.path.dirname(dst))
         print(f" - {os.path.dirname(dst)} created")
     shutil.copyfile(src, dst)
-    print(f" - {dst}")
+    # print(f" - {dst}")
 
 
 if __name__ == "__main__":
