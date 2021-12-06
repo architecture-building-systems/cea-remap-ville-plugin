@@ -69,11 +69,13 @@ def main(config, new_locator, scenario_locator_sequences):
     zone_updated["height_ag"] = zone_updated['floors_ag'] * 3
     zone_updated.loc[buildings_modified, 'REFERENCE'] = 'sequential-transformation'
     zone_updated.to_file(new_locator.get_zone_geometry())
+    # TODO: add back the buildings untouched
     print(new_locator.get_zone_geometry())
     # typology
     typology_save = typology_updated.copy()
     typology_save.loc[buildings_modified, 'REFERENCE'] = 'sequential-transformation'
     typology_save['REFERENCE'] = typology_save['REFERENCE_x']
+    # TODO: add back the buildings untouched
     typology_save.reset_index(inplace=True)
     save_updated_typology(Path(new_locator.get_building_typology()), typology_save)
     print(new_locator.get_building_typology())
