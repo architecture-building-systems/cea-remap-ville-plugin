@@ -122,7 +122,7 @@ def optimize(
         ]
         opt_problem += pulp.lpSum(cond) <= sub_target
 
-    opt_problem.solve(pulp.GLPK(options=['--mipgap', '0.01']))
+    opt_problem.solve(pulp.GLPK(options=['--mipgap', '0.01'], msg=False))
     return opt_problem
 
 
