@@ -4,10 +4,13 @@ import os
 import geopandas as gpd
 import pulp
 from collections import defaultdict
+from pathlib import Path
 
 import cea.config
 import cea.inputlocator
 from cea.utilities.dbf import dbf_to_dataframe
+from remap_ville_plugin.utilities import save_updated_typology
+from remap_ville_plugin.create_technology_database import create_input_technology_folder
 
 path_to_folder = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\Echallens'
 use_cols = ['MULTI_RES', 'SINGLE_RES', 'SECONDARY_RES', 'HOTEL', 'OFFICE', 'RETAIL', 'FOODSTORE',
@@ -16,36 +19,71 @@ use_cols = ['MULTI_RES', 'SINGLE_RES', 'SECONDARY_RES', 'HOTEL', 'OFFICE', 'RETA
             'UNIVERSITY']
 
 
-def main(config):
+def main(config, new_locator, scenario_locator_sequences):
+    print('\nStarting sequential urban transformation...', config.scenario_name)
     # 1. get projection
-    typology_dict, gfa_per_use_dict = {}, {}
-    path_to_input = os.path.join(path_to_folder, '2020/inputs')
-    typology_dict['2020'] = get_district_typology_merged(path_to_input)
-    path_to_input = os.path.join(path_to_folder, '2040_PUN/inputs')
-    typology_dict['2040'] = get_district_typology_merged(
-        path_to_input)  # FIXME: replace get_gfa_per_usetype by urban_transformation
-    path_to_input = os.path.join(path_to_folder, '2060_PUN/inputs')
-    typology_dict['2060'] = get_district_typology_merged(path_to_input)
+    typology_dict = {}
+    for scenario_name, scenario_locator in scenario_locator_sequences.items():
+        typology_dict[scenario_name] = get_district_typology_merged(scenario_locator.get_input_folder())
+
     gfa_per_use_years_df = pd.concat(
         [get_gfa_per_usetype(typology_dict[key], key, use_cols) for key in typology_dict.keys()])
+    # TODO: calculate 2040
+    scenario_intermediate = config.scenario_name
+    gfa_per_use_years_df.loc[scenario_intermediate] = gfa_per_use_years_df.loc['2020']
+
     # 2. get diff_gfa
-    final_gfa = gfa_per_use_years_df.loc['2060']
-    intermediate_gfa = gfa_per_use_years_df.loc['2040']
+    scenario_endstate = list(scenario_locator_sequences.keys())[-1]
+    final_gfa = gfa_per_use_years_df.loc[scenario_endstate]
+    intermediate_gfa = final_gfa/2 # FIXME: place holder
     diff_gfa = final_gfa - intermediate_gfa
     # 3. modify buildings
-    typology_endstate = typology_dict['2060']
+    typology_endstate = typology_dict[scenario_endstate]
     typology_updated = typology_endstate.copy()
     # TODO: drop buildings that are kept as in 2020 state
+    buildings_modified = set()
     for usetype in use_cols:
         print('\n', usetype, 'GFA to reduce', round(diff_gfa[usetype], 1))
         if diff_gfa[usetype] > 0:
-            typology_updated = modify_typology_per_building_usetype(usetype, typology_updated, typology_endstate,
-                                                                    diff_gfa)
+            typology_updated, buildings_modified_usetype = modify_typology_per_building_usetype(usetype,
+                                                                                                typology_updated,
+                                                                                                typology_endstate,
+                                                                                                diff_gfa)
+            buildings_modified = set.union(buildings_modified, buildings_modified_usetype)
             # get errors
-            gfa_updated = get_gfa_per_usetype(typology_updated, '2040', use_cols).loc['2040', usetype]
-            gfa_projected = gfa_per_use_years_df.loc['2040', usetype]
+            gfa_updated = get_gfa_per_usetype(typology_updated, scenario_intermediate, use_cols).loc[scenario_intermediate, usetype]
+            gfa_projected = gfa_per_use_years_df.loc[scenario_intermediate, usetype]
             print('GFA(updated):', round(gfa_updated), ' GFA(projected):', round(gfa_projected))
     # 4. save typology_updated, zone_updated
+    buildings_not_yet_built = set(list(typology_endstate.index)) - set(list(typology_updated.index))
+    buildings_modified = list(buildings_modified - buildings_not_yet_built)
+    # zone
+    zone_endstate = gpd.read_file(scenario_locator_sequences[scenario_endstate].get_zone_geometry()).set_index('Name')
+    zone_updated = zone_endstate.copy()
+    zone_updated = zone_updated.drop(buildings_not_yet_built) # remove buildings
+    # save zone_shp_updated
+    zone_updated["floors_ag"] = typology_updated['floors_all'] - typology_updated['floors_bg']
+    building_no_floors_ag = zone_updated[zone_updated['floors_ag']==0].index
+    zone_updated.loc[building_no_floors_ag,'floors_ag'] = zone_updated.loc[building_no_floors_ag,'floors_bg']
+    zone_updated.loc[building_no_floors_ag,'floors_bg'] = 0
+    zone_updated["height_ag"] = zone_updated['floors_ag'] * 3
+    zone_updated.loc[buildings_modified, 'REFERENCE'] = 'sequential-transformation'
+    zone_updated.to_file(new_locator.get_zone_geometry())
+    print(new_locator.get_zone_geometry())
+    # typology
+    typology_save = typology_updated.copy()
+    typology_save.loc[buildings_modified, 'REFERENCE'] = 'sequential-transformation'
+    typology_save['REFERENCE'] = typology_save['REFERENCE_x']
+    typology_save.reset_index(inplace=True)
+    save_updated_typology(Path(new_locator.get_building_typology()), typology_save)
+    print(new_locator.get_building_typology())
+    # create technology folder
+    district_archetype = config.remap_ville_scenarios.district_archetype
+    year = 2040
+    urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
+    folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
+    create_input_technology_folder(folder_name, new_locator)
+
 
 
 def modify_typology_per_building_usetype(usetype, typology_updated, typology_endstate, diff_gfa):
@@ -58,7 +96,8 @@ def modify_typology_per_building_usetype(usetype, typology_updated, typology_end
     typology_updated = write_selected_buildings_in_typology(usetype, selected_floors_to_reduce_usetype,
                                                             floors_usetype_endstate, typology_endstate,
                                                             typology_updated)
-    return typology_updated
+    buildings_modified = list(selected_floors_to_reduce_usetype.index)
+    return typology_updated, buildings_modified
 
 
 def write_selected_buildings_in_typology(building_usetype, selected_floors_to_reduce, floors_of_usetype_end,
@@ -82,12 +121,12 @@ def write_selected_buildings_in_typology(building_usetype, selected_floors_to_re
             print(building, use_order, 'updated:', updated_total_floors, 'expected:', expected_total_floors[building])
             a_cols = list(typology_endstate.filter(like='USE').columns)
             a_cols.extend(['floors_all'])
-            b_updated = typology_updated.loc[building, a_cols]
-            print(b_updated)
+            print(typology_updated.loc[building, a_cols])
             raise ValueError(building, "Total number of floors mis-match excpeted number of floors")
         if np.isclose(typology_updated.loc[building, 'floors_all'], 0.0):
             # drop building if no floors_all in 2040
             typology_updated.loc[building, 'YEAR'] = 2060
+            typology_updated = typology_updated.drop(building)
         else:
             # recalculate ratios
             for use_order in ['1ST_USE', '2ND_USE', '3RD_USE']:
@@ -105,8 +144,8 @@ def write_selected_buildings_in_typology(building_usetype, selected_floors_to_re
             typology_updated.loc[building, 'YEAR'] = 2040  # TODO: compare to 2020
     # calculate errors
     # gfa of building_usetype in typology_updated
-    buildings_not_yet_built = typology_updated[typology_updated['YEAR'] == 2060].index
-    typology_updated = typology_updated.drop(buildings_not_yet_built)
+    # buildings_not_yet_built = typology_updated[typology_updated['YEAR'] == 2060].index
+    # typology_updated = typology_updated.drop(buildings_not_yet_built)
     return typology_updated
 
 
@@ -205,4 +244,22 @@ def get_gfa_per_usetype(typology_merged, key, use_cols):
 
 
 if __name__ == "__main__":
-    main(cea.config.Configuration())
+    config = cea.config.Configuration()
+    config.project = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\Echallens'
+
+    scenario_locator_sequences = {}
+    s_name = '2020'
+    config.scenario_name = s_name
+    scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    s_name = '2060_PUN'
+    config.scenario_name = s_name
+    scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+
+    s_name = '2040_PUN_test'
+    config.scenario_name = s_name
+    new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    os.mkdir(config.scenario)
+    os.mkdir(new_locator.get_input_folder())
+    os.mkdir(new_locator.get_building_geometry_folder())
+    os.mkdir(new_locator.get_building_properties_folder())
+    main(config, new_locator, scenario_locator_sequences)
