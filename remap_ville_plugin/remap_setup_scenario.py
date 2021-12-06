@@ -2,7 +2,8 @@
 Initialize a new scenario based on a old scenario.
 """
 import os
-
+import pandas as pd
+from pathlib import Path
 
 import cea.config
 import cea.inputlocator
@@ -24,11 +25,19 @@ __status__ = "Production"
 
 
 def main(config):
+    ## 0. Get case study inputs
+    path_to_case_study_inputs = os.path.join(config.scenario, "case_study_inputs.xlsx")
+    check_case_study_inputs(config, path_to_case_study_inputs)
+    worksheet = f"{config.remap_ville_scenarios.district_archetype}_{config.remap_ville_scenarios.urban_development_scenario}"
+    case_study_inputs_df = pd.read_excel(path_to_case_study_inputs, sheet_name=worksheet).set_index('year')
+
     scenario_locator_sequences = {}
-    scenario_locator_sequences[config.scenario_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    initial_scenario_name = config.scenario_name
+    scenario_locator_sequences[initial_scenario_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     ## 1. Initialize new scenario
     config, new_locator, old_locator, urban_development_scenario, year = initialize_new_scenario(config)
-    scenario_locator_sequences[config.scenario_name] = new_locator
+    endstate_scenario_name = config.scenario_name
+    scenario_locator_sequences[endstate_scenario_name] = new_locator
 
     ## 2. Urban Transformation (2060)
     print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
@@ -72,6 +81,18 @@ def main(config):
     sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences)
 
     # TODO: update use_types in the technology folder!!!
+
+
+def check_case_study_inputs(config, path_to_case_study_inputs):
+    if not os.path.exists(path_to_case_study_inputs):
+        path_to_template = Path(os.path.join(os.path.dirname(__file__), "case_study_inputs_template.xlsx"))
+        output = os.path.join(config.scenario, "case_study_inputs_template.xlsx")
+        copy_file(path_to_template, output)
+        raise ValueError(
+            'Please provide `case_study_inputs.xlsx` following `case_study_inputs_template.xlsx` in {}'.format(
+                config.scenario))
+
+
 def initialize_new_scenario(config):
     old_scenario_name = config.scenario_name
     old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
