@@ -15,7 +15,7 @@ import cea.config
 import cea.inputlocator
 from cea.demand.building_properties import calc_useful_areas
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
-from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns, count_usetype
+from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns, count_usetype, save_updated_typology
 import remap_ville_plugin.area_optimization_mapper as amap
 from remap_ville_plugin.remap_setup_scenario import update_config
 
@@ -192,11 +192,13 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
     :return:
     """
     SECONDARY_RES_buildings = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SECONDARY_RES'].index)
-    print(len(SECONDARY_RES_buildings), 'SECONDARY_RES buildings in the district.')
     SECONDARY_RES_gfa = typology_statusquo.loc[SECONDARY_RES_buildings]['GFA_m2'].sum()
-    required_SECONDARY_RES_gfa = gfa_per_use_additional_required['SECONDARY_RES']
+    print(len(SECONDARY_RES_buildings), 'SECONDARY_RES buildings in the district.')
+    required_SECONDARY_RES_gfa = 0.0
+    if 'SECONDARY_RES' in gfa_per_use_additional_required.index:
+        required_SECONDARY_RES_gfa = gfa_per_use_additional_required['SECONDARY_RES']
     required_MULTI_RES_gfa = gfa_per_use_additional_required['MULTI_RES']
-    if np.isclose(required_SECONDARY_RES_gfa, 0.0) and SECONDARY_RES_gfa / required_MULTI_RES_gfa > 10:
+    if SECONDARY_RES_gfa > 0 and np.isclose(required_SECONDARY_RES_gfa, 0.0) and SECONDARY_RES_gfa / required_MULTI_RES_gfa > 10:
         delta_gfa_dict = {}
         buffer = required_MULTI_RES_gfa * 0.1
         for i in range(1000):
@@ -212,10 +214,13 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
         SECONDARY_to_MULTI_RES_gfa = typology_statusquo.loc[buildings_to_MULTI_RES]['GFA_m2'].sum()
         gfa_per_use_additional_required['MULTI_RES'] = max(
             required_MULTI_RES_gfa - SECONDARY_to_MULTI_RES_gfa, 0)
+        # update targets
+        gfa_per_use_future_target["SECONDARY_RES"] = gfa_per_use_future_target[
+                                                         "SECONDARY_RES"] - SECONDARY_to_MULTI_RES_gfa
     else:
         SECONDARY_to_MULTI_RES_gfa = 0.0
-    # update targets
-    gfa_per_use_future_target["SECONDARY_RES"] = gfa_per_use_future_target["SECONDARY_RES"] - SECONDARY_to_MULTI_RES_gfa
+        gfa_per_use_future_target["SECONDARY_RES"] = 0.0
+
     return gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo
 
 
@@ -295,18 +300,6 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
                     simulated_typology.loc[b, use_col] = PARAMS['MULTI_RES_PLANNED']  # FIXME: hard-coded
                     # simulated_typology.loc[b, "STANDARD"] = "STANDARD5" # TODO: get from input
     save_updated_typology(path_to_output_typology_file, simulated_typology)
-
-
-def save_updated_typology(path_to_output_typology_file, simulated_typology):
-    output = simulated_typology.copy()
-    keep = list()
-    columns_to_keep = [("Name", str), ("YEAR", int), ("STANDARD", str), ("1ST_USE", str), ("1ST_USE_R", float),
-                       ("2ND_USE", str), ("2ND_USE_R", float), ("3RD_USE", str), ("3RD_USE_R", float),
-                       ("REFERENCE", str)]
-    for column, column_type in columns_to_keep:
-        keep.append(column)
-        output[column] = output[column].astype(column_type)
-    dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
 
 
 def optimize_all_scenarios(range_additional_floors_per_building, scenarios, target_add_gfa_per_use,
@@ -524,7 +517,6 @@ def read_existing_uses(typology_merged):
                        "SERVERROOM", "SWIMMING", "UNIVERSITY", "COOLROOM", "MULTI_RES_2040"]  # TODO: config?
     assert all([True if use in valid_use_types else False for use in existing_uses])  # check valid uses
     return existing_uses
-
 
 def get_sample_data(new_locator):
     """

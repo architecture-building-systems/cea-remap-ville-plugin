@@ -1,5 +1,23 @@
 import pandas as pd
+import shutil
 from collections import defaultdict
+from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
+
+def save_updated_typology(path_to_output_typology_file, simulated_typology):
+    output = simulated_typology.copy()
+    keep = list()
+    columns_to_keep = [("Name", str), ("YEAR", int), ("STANDARD", str), ("1ST_USE", str), ("1ST_USE_R", float),
+                       ("2ND_USE", str), ("2ND_USE_R", float), ("3RD_USE", str), ("3RD_USE_R", float),
+                       ("REFERENCE", str)]
+    for column, column_type in columns_to_keep:
+        keep.append(column)
+        output[column] = output[column].astype(column_type)
+    dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
+    return
+
+def copy_folder(src, dst):
+    print(f" - {dst}")
+    shutil.copytree(src, dst)
 
 
 def calc_gfa_per_use(typology_merged: pd.DataFrame, GFA_type="GFA_m2"):

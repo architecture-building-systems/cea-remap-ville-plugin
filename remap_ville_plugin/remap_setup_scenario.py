@@ -2,13 +2,16 @@
 Initialize a new scenario based on a old scenario.
 """
 import os
-import shutil
+
 
 import cea.config
 import cea.inputlocator
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
 from remap_ville_plugin.create_technology_database import copy_file
 import remap_ville_plugin.urban_transformation as urban_transformation
+import remap_ville_plugin.sequential_urban_transformation as sequential_urban_transformation
+from remap_ville_plugin.utilities import copy_folder
+from remap_ville_plugin.create_technology_database import create_input_technology_folder
 
 __author__ = "Shanshan Hsieh"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -21,10 +24,13 @@ __status__ = "Production"
 
 
 def main(config):
+    scenario_locator_sequences = {}
+    scenario_locator_sequences[config.scenario_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     ## 1. Initialize new scenario
     config, new_locator, old_locator, urban_development_scenario, year = initialize_new_scenario(config)
+    scenario_locator_sequences[config.scenario_name] = new_locator
 
-    ## 2. Urban Transformation
+    ## 2. Urban Transformation (2060)
     print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
     urban_transformation.main(config)
 
@@ -47,12 +53,25 @@ def main(config):
     architecture_df = dbf_to_dataframe(new_locator.get_building_architecture()).set_index('Name')
     architecture_df = update_architecture_dbf(MULTI_RES_2040, architecture_df)
     save_dbfs(architecture_df, new_locator.get_building_architecture())
+    # technology
+    district_archetype = config.remap_ville_scenarios.district_archetype
+    folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
+    create_input_technology_folder(folder_name, new_locator)
+
+    ## 3. Urban Transformation (2040)
+    config.scenario_name = '2060_'+urban_development_scenario
+    old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    new_scenario_name = '2040_'+urban_development_scenario
+    config.scenario_name = new_scenario_name
+    new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    initialize_input_folder(config, new_locator)
+    copy_inputs_folder_content(old_locator, new_locator)
+    # copy air conditioning and supply system
+    copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
+    copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
+    sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences)
 
     # TODO: update use_types in the technology folder!!!
-
-    return
-
-
 def initialize_new_scenario(config):
     old_scenario_name = config.scenario_name
     old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
@@ -60,13 +79,17 @@ def initialize_new_scenario(config):
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     initialize_input_folder(config, new_locator)
     print(f"Initializing new scenario: {new_scenario_name} base on {old_scenario_name}")
+    copy_inputs_folder_content(old_locator, new_locator)
+    return config, new_locator, old_locator, urban_development_scenario, year
+
+
+def copy_inputs_folder_content(old_locator, new_locator):
     # copy files from old_locator to new_locator
     copy_folder(old_locator.get_building_geometry_folder(), new_locator.get_building_geometry_folder())
     copy_folder(old_locator.get_terrain_folder(), new_locator.get_terrain_folder())
     os.mkdir(new_locator.get_building_properties_folder())
     copy_file(old_locator.get_building_typology(), new_locator.get_building_typology())
     copy_file(old_locator.get_building_architecture(), new_locator.get_building_architecture())
-    return config, new_locator, old_locator, urban_development_scenario, year
 
 
 def update_config(config):
@@ -118,11 +141,6 @@ def get_building_lists_by_use(typology_df):
     OTHER_USES = list(set(typology_df.index) - set(_RES))
     print('OTHER_USES', len(OTHER_USES))
     return MULTI_RES_2040, ORIG_RES, OTHER_USES
-
-
-def copy_folder(src, dst):
-    print(f" - {dst}")
-    shutil.copytree(src, dst)
 
 
 def initialize_input_folder(config, new_locator):
