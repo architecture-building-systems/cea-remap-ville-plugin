@@ -10,7 +10,7 @@ import cea.inputlocator
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
 from remap_ville_plugin.create_technology_database import copy_file
 import remap_ville_plugin.urban_transformation as urban_transformation
-import remap_ville_plugin.sequential_urban_transformation as sequential_urban_transformation
+import remap_ville_plugin.urban_transformation_sequential as sequential_urban_transformation
 from remap_ville_plugin.utilities import copy_folder
 from remap_ville_plugin.create_technology_database import create_input_technology_folder
 
@@ -72,12 +72,14 @@ def main(config):
     old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     new_scenario_name = '2040_'+urban_development_scenario
     config.scenario_name = new_scenario_name
+    config.remap_ville_scenarios.year = 2040
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     initialize_input_folder(config, new_locator)
     copy_inputs_folder_content(old_locator, new_locator)
     # copy air conditioning and supply system
     copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
     copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
+
     sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences)
 
     # TODO: update use_types in the technology folder!!!
