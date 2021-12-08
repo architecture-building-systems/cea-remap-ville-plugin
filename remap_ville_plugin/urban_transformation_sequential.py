@@ -30,18 +30,18 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs):
     typology_dict = {}
     for scenario_name, scenario_locator in scenario_locator_sequences.items():
         typology_dict[scenario_name] = get_district_typology_merged(scenario_locator.get_input_folder())
-    gfa_per_use_years_df = pd.concat(
-        [get_gfa_per_usetype(typology_dict[key], key, use_cols) for key in typology_dict.keys()])
+    gfa_per_use_years_df = pd.concat([get_gfa_per_usetype(typology_dict[key], key) for key in typology_dict.keys()])
     # calculate 2040 according to 2020
     typology_statusquo = typology_dict[scenario_statusquo]
     gfa_per_use_future_target, gfa_per_use_additional_target, gfa_total_additional_target, \
     overview, rel_ratio_to_res_gfa_target, \
     typology_planned, typology_statusquo = preprocessing.main(config, typology_statusquo, case_study_inputs)
-    missing_usetypes = set(use_cols) - set(gfa_per_use_future_target.index)
-    gfa_per_use_intermediate = gfa_per_use_future_target.add(pd.Series(index=missing_usetypes), fill_value=0.0)
-    gfa_per_use_intermediate = gfa_per_use_intermediate.fillna(0.0)
-    gfa_per_use_intermediate = gfa_per_use_intermediate[use_cols]
-    gfa_per_use_years_df.loc[scenario_intermediate] = gfa_per_use_intermediate
+    # missing_usetypes = set(use_cols) - set(gfa_per_use_future_target.index)
+    # gfa_per_use_intermediate = gfa_per_use_future_target.add(pd.Series(index=missing_usetypes), fill_value=0.0)
+    # gfa_per_use_intermediate = gfa_per_use_future_target.fillna(0.0)
+    # gfa_per_use_intermediate = gfa_per_use_intermediate[use_cols]
+    gfa_per_use_years_df.loc[scenario_intermediate] = gfa_per_use_future_target
+    gfa_per_use_years_df.fillna(0.0, inplace=True)
     # 2. get diff_gfa
     # FIXME: check MULTI_RES_2040
     diff_gfa = gfa_per_use_years_df.loc[scenario_endstate] - gfa_per_use_years_df.loc[scenario_intermediate]
@@ -50,7 +50,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs):
     typology_updated = typology_endstate.copy()
     # TODO: drop buildings that are kept as in 2020 state
     buildings_modified = set()
-    for usetype in use_cols:
+    for usetype in diff_gfa.index:
         print('\n', usetype, 'GFA to reduce', round(diff_gfa[usetype], 1))
         if diff_gfa[usetype] > 100: # FIXME: quick solve to only move when m2 > 100
             typology_updated, buildings_modified_usetype = modify_typology_per_building_usetype(usetype,
@@ -59,7 +59,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs):
                                                                                                 diff_gfa)
             buildings_modified = set.union(buildings_modified, buildings_modified_usetype)
             # get errors
-            gfa_updated = get_gfa_per_usetype(typology_updated, scenario_intermediate, use_cols).loc[
+            gfa_updated = get_gfa_per_usetype(typology_updated, scenario_intermediate).loc[
                 scenario_intermediate, usetype]
             gfa_projected = gfa_per_use_years_df.loc[scenario_intermediate, usetype]
             print('GFA(updated):', round(gfa_updated), ' GFA(projected):', round(gfa_projected))
@@ -94,6 +94,12 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs):
     urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
     folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
     create_input_technology_folder(folder_name, new_locator)
+
+
+def add_gfa_per_use_intermediate(gfa_per_use_future_target, gfa_per_use_years_df, missing_usetypes,
+                                 scenario_intermediate):
+
+    return gfa_per_use_years_df
 
 
 def modify_typology_per_building_usetype(usetype, typology_updated, typology_endstate, diff_gfa):
@@ -183,7 +189,7 @@ def get_building_candidates(building_usetype, typology_endstate):
 
 def optimization_problem(building_usetype, floors_of_usetype, footprint_of_usetype, diff_gfa):
     # Initialize Class
-    opt_problem = pulp.LpProblem("Maximize", pulp.LpMaximize)
+    opt_problem = pulp.LpProblem("Minimize", pulp.LpMinimize)
 
     # Define Decision Variables
     target_variables = floors_of_usetype.index  # buildings
@@ -206,7 +212,7 @@ def optimization_problem(building_usetype, floors_of_usetype, footprint_of_usety
 
     # Define Constraints
     opt_problem += pulp.lpSum([x_floors[i] * sub_building_footprint_area[i]
-                               for i in target_variables]) <= target
+                               for i in target_variables]) >= target
     for i in target_variables:
         opt_problem += x_floors[i] <= floors_of_usetype[i]
 
@@ -234,7 +240,7 @@ def get_district_typology_merged(path_to_input):
     return typology_merged
 
 
-def get_gfa_per_usetype(typology_merged, key, use_cols):
+def get_gfa_per_usetype(typology_merged, key):
     # GFA per use whole district # TODO: import from cea utilities
     gfa_series_1st_use = typology_merged.groupby("1ST_USE").sum().loc[:, "GFA_1ST_USE"]
     gfa_series_2nd_use = typology_merged.groupby("2ND_USE").sum().loc[:, "GFA_2ND_USE"]
@@ -243,12 +249,12 @@ def get_gfa_per_usetype(typology_merged, key, use_cols):
     for use_series in [gfa_series_1st_use, gfa_series_2nd_use, gfa_series_3rd_use]:
         for use, val in use_series.iteritems():
             gfa_per_use_type[use] += val
-    use_not_in_district = set(use_cols) - set(list(gfa_per_use_type.keys()))
-    for use in use_not_in_district:
-        gfa_per_use_type[use] = 0.0
+    # use_not_in_district = set(use_cols) - set(list(gfa_per_use_type.keys()))
+    # for use in use_not_in_district:
+    #     gfa_per_use_type[use] = 0.0
     gfa_per_use_type = dict(gfa_per_use_type)
     gfa_per_use_type_df = pd.DataFrame.from_dict(gfa_per_use_type, orient="index").T
-    gfa_per_use_type_df = gfa_per_use_type_df[use_cols]
+    # gfa_per_use_type_df = gfa_per_use_type_df[use_cols]
     gfa_per_use_type_df.index = [key]
     return gfa_per_use_type_df
 
