@@ -47,13 +47,20 @@ PARAMS = {
     'scenario_count': 10  # FIXME: advanced config parameter
 }
 
+PARAMS = {
+    'scenario_count': 10,
+    'lower_bound_floors': 0,
+    'upper_bound_floors': 50,
+    'floor_height': 3
+}
 
-def main(config):
+
+def main(config, case_study_inputs_df):
     config, new_scenario_name, urban_development_scenario, year = update_config(config)
     ## Save PARAMS
     with open(os.path.join(config.scenario, str(new_scenario_name) + "_PARAMS.json"), "w") as fp:
         json.dump(PARAMS, fp)
-
+    case_study_inputs = case_study_inputs_df.loc[float(year)]
     ## 1. Gather input data
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     typology_merged = get_sample_data(new_locator)
@@ -67,21 +74,23 @@ def main(config):
     ## 3. Finalize Inputs
     # filter out buildings by use
     typology_kept_uses, typology_untouched_uses = remove_buildings_by_uses(typology_statusquo,
-                                                                           uses_to_remove=PARAMS['USES_UNTOUCH'])
+                                                                           uses_to_remove=case_study_inputs[
+                                                                               'USES_UNTOUCH'])
     # filter out buildings by year
-    typology_preserved_year, typology_after_year = filter_buildings_by_year(typology_kept_uses,
-                                                                    year=PARAMS["preserve_buildings_built_before"])
+    typology_preserved_year, typology_after_year = filter_buildings_by_year(typology_kept_uses, year=case_study_inputs[
+        "preserve_buildings_built_before"])
     # final typology_input to be optimized
     typology_input = typology_after_year.copy()
     # set constraints
-    range_additional_floors_per_building = calc_range_additional_floors_per_building(typology_input)
+    range_additional_floors_per_building = calc_range_additional_floors_per_building(typology_input, case_study_inputs)
     possible_uses_per_cityzone = update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target)
     # create random scenarios
     scenarios = amap.randomize_scenarios(typology_merged=typology_input, usetype_constraints=possible_uses_per_cityzone,
                                          use_columns=typology_use_columns(), scenario_count=PARAMS['scenario_count'])
     ## 4. Optimize Urban Transformation
     metrics, op_solutions = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
-                                                    gfa_per_use_additional_target, gfa_total_additional_target)
+                                                   gfa_per_use_additional_target, gfa_total_additional_target,
+                                                   case_study_inputs)
     ## 5. Reconstruct District with the Best Scenario
     best_scenario, scenario_errors = amap.find_optimum_scenario(op_solutions=op_solutions,
                                                                 target=gfa_total_additional_target)
@@ -94,7 +103,7 @@ def main(config):
     # get floors added per building
     result_add_floors = amap.parse_milp_solution(op_solutions[best_scenario]["solution"])
     save_best_scenario(best_typology_df, result_add_floors, op_solutions[best_scenario]['building_to_sub_building'],
-                       typology_statusquo, new_locator)
+                       typology_statusquo, new_locator, year)
 
     ## 6. Check results and save overview_df
     save_updated_typology_to_overview(new_locator, new_scenario_name, overview)
@@ -114,6 +123,7 @@ def save_updated_typology_to_overview(new_locator, new_scenario_name, overview):
     overview['diff_add_gfa_per_use'] = overview['gfa_per_use_additional_target'] - overview['actual_add_gfa_per_use']
     overview_df = pd.DataFrame(overview)
     overview_df = pd.concat([overview_df, use_count_df], axis=1)
+    # TODO: fill na with 0
     overview_df.to_csv(os.path.join(new_locator.get_input_folder(), new_scenario_name + "_overview.csv"))
     return
 
@@ -138,7 +148,8 @@ def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_buildin
     return floors_ag_updated, zone_shp_updated
 
 
-def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo, new_locator):
+def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo, new_locator,
+                       year):
     # update zone.shp
     path_to_output_zone_shp = Path(new_locator.get_zone_geometry())
     path_to_output_typology_dbf = Path(new_locator.get_building_typology())
@@ -150,21 +161,22 @@ def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_buil
                                                           path_to_output_zone_shp)
     # update typology.dbf
     update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
-                        zone_shp_updated, floors_ag_updated, path_to_output_typology_dbf)
+                        zone_shp_updated, floors_ag_updated, path_to_output_typology_dbf, year)
 
 
 def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo,
-                        zone_shp_updated, floors_ag_updated, path_to_output_typology_file):
+                        zone_shp_updated, floors_ag_updated, path_to_output_typology_file, year):
     status_quo_typology = typology_statusquo.copy()
     simulated_typology = best_typology_df.copy()
 
     zone_updated_gfa_per_building = zone_shp_updated.area * (
             zone_shp_updated['floors_ag'] + zone_shp_updated['floors_bg'])
 
+    # update usetype ratios
     simulated_typology["1ST_USE_R"] = simulated_typology["1ST_USE_R"].astype(float)
     simulated_typology["2ND_USE_R"] = simulated_typology["2ND_USE_R"].astype(float)
     simulated_typology["3RD_USE_R"] = simulated_typology["3RD_USE_R"].astype(float)
-    simulated_typology["REFERENCE"] = "after-optimization"  # FIXME: change year as well
+    simulated_typology["REFERENCE"] = status_quo_typology["REFERENCE_x"] 
     use_col_dict = {i: column for i, column in enumerate(["1ST_USE", "2ND_USE", "3RD_USE"])}
     for b, sb in building_to_sub_building.items():
         updated_floor_per_use_col = dict()
@@ -182,22 +194,29 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
                     sub_building_additional_floors + (current_ratio * current_floors))
         if not np.isclose(updated_floors, sum(updated_floor_per_use_col.values())):
             raise ValueError("total number of floors mis-match excpeted number of floors")
-        # write update ratio
+        # write updated usetype ratio
         for use_col in updated_floor_per_use_col:
-            r = updated_floor_per_use_col[use_col] / updated_floors
-            simulated_typology.loc[b, use_col + '_R'] = r
-            if np.isclose(r, 0.0):
-                simulated_typology.loc[b, use_col] = "NONE"
-            if simulated_typology.loc[b, use_col] == 'MULTI_RES':
-                # update MULTI_RES use-type properties
-                if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
-                    simulated_typology.loc[b, use_col] = PARAMS['MULTI_RES_PLANNED']  # FIXME: hard-coded
-                    # simulated_typology.loc[b, "STANDARD"] = "STANDARD5" # TODO: get from input
+            use_statusquo = typology_statusquo.loc[b, use_col]
+            r_statusquo = typology_statusquo.loc[b, use_col+'_R']
+            use_updated = simulated_typology.loc[b, use_col]
+            r_updated = updated_floor_per_use_col[use_col] / updated_floors
+            if np.isclose(r_updated, 0.0):
+                use_updated = "NONE"
+                simulated_typology.loc[b, use_col] = use_updated
+            if r_updated > 0 and (use_statusquo, r_statusquo, current_floors) != (use_updated, r_updated, updated_floors):
+                # building that changes usetype or ratios
+                simulated_typology.loc[b, use_col + '_R'] = r_updated
+                simulated_typology.loc[b, 'YEAR'] = year
+                # if simulated_typology.loc[b, use_col] == 'MULTI_RES':
+                #     # update MULTI_RES use-type properties
+                #     if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
+                #         simulated_typology.loc[b, use_col] = 'MULTI_RES_2040'  # FIXME: hard-coded, MAYBE REDUNDANT
+
     save_updated_typology(path_to_output_typology_file, simulated_typology)
 
 
 def optimize_all_scenarios(range_additional_floors_per_building, scenarios, target_add_gfa_per_use,
-                           total_additional_gfa_target):
+                           total_additional_gfa_target, case_study_inputs):
     op_solutions = dict()
     metrics = dict()
     for scenario in scenarios:
@@ -224,8 +243,8 @@ def optimize_all_scenarios(range_additional_floors_per_building, scenarios, targ
         solution = amap.optimize(
             total_additional_gfa_target,
             sub_building_idx,
-            PARAMS['min_additional_floors'],
-            PARAMS['max_additional_floors'],
+            PARAMS['lower_bound_floors'],
+            PARAMS['upper_bound_floors'],
             sub_building_footprint_area,
             building_to_sub_building,
             range_additional_floors_per_building,
@@ -278,12 +297,12 @@ def get_possible_uses_per_cityzone():
     }
 
 
-def calc_range_additional_floors_per_building(typology_status_quo):
+def calc_range_additional_floors_per_building(typology_status_quo, case_study_inputs):
     height_limit_per_city_zone = {
-        0: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
-        1: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
-        2: (0, PARAMS['building_height_limit'] // PARAMS['floor_height']),
-        3: (0, PARAMS['building_height_limit'] // PARAMS['floor_height'])}  # FIXME
+        0: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
+        1: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
+        2: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
+        3: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height'])}  # FIXME
     # height_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26),
     #                               3: (0, 13)}  # FIXME: this only applies to Altstetten
     range_additional_floors_per_building = dict()
@@ -308,6 +327,7 @@ def read_existing_uses(typology_merged):
                        "SERVERROOM", "SWIMMING", "UNIVERSITY", "COOLROOM", "MULTI_RES_2040"]  # TODO: config?
     assert all([True if use in valid_use_types else False for use in existing_uses])  # check valid uses
     return existing_uses
+
 
 def get_sample_data(new_locator):
     """
