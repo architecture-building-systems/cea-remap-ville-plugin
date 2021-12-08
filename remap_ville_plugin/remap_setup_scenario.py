@@ -39,9 +39,9 @@ def main(config):
     endstate_scenario_name = config.scenario_name
     scenario_locator_sequences[endstate_scenario_name] = new_locator
 
-    ## 2. Urban Transformation (2060)
+    ## 2. Urban Transformation (end-state: 2060)
     print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
-    urban_transformation.main(config)
+    urban_transformation.main(config, case_study_inputs_df)
 
     # modify dbf
     print(f"Modifying building properties in... {year}")
@@ -49,8 +49,8 @@ def main(config):
     copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
     copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
     typology_df = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name')
-    MULTI_RES_2040, ORIG_RES, OTHER_USES = get_building_lists_by_use(typology_df)
     # update air-conditioning according to use
+    MULTI_RES_2040, ORIG_RES, OTHER_USES = get_building_lists_by_use(typology_df)
     airconditioning_df = dbf_to_dataframe(new_locator.get_building_air_conditioning()).set_index('Name')
     airconditioning_df = update_air_conditioning_dbf(MULTI_RES_2040, ORIG_RES, OTHER_USES, airconditioning_df)
     save_dbfs(airconditioning_df, new_locator.get_building_air_conditioning())
@@ -79,8 +79,8 @@ def main(config):
     # copy air conditioning and supply system
     copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
     copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
-
-    sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences)
+    case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
+    sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences, case_study_inputs)
 
     # TODO: update use_types in the technology folder!!!
 
@@ -91,7 +91,7 @@ def check_case_study_inputs(config, path_to_case_study_inputs):
         output = os.path.join(config.scenario, "case_study_inputs_template.xlsx")
         copy_file(path_to_template, output)
         raise ValueError(
-            'Please provide `case_study_inputs.xlsx` following `case_study_inputs_template.xlsx` in {}'.format(
+            'Please provide `case_study_inputs.xlsx` by modifying `case_study_inputs_template.xlsx` in {}'.format(
                 config.scenario))
 
 
