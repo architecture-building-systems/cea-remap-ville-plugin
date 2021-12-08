@@ -116,13 +116,14 @@ def save_updated_typology_to_overview(new_locator, new_scenario_name, overview):
     typology_updated = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name', drop=False)
     typology_updated = typology_updated.merge(prop_geometry, left_index=True, right_on='Name')
     use_count_df = count_usetype(typology_updated)
-    gfa_per_use_type_updated = calc_gfa_per_use(typology_updated, "GFA_m2")
-    overview['gfa_per_use_updated'] = gfa_per_use_type_updated.astype(int)
-    overview['gfa_per_ratio_updated'] = round(gfa_per_use_type_updated / gfa_per_use_type_updated.sum(), 5)
+    gfa_per_use_updated = calc_gfa_per_use(typology_updated, "GFA_m2")
+    overview['gfa_per_use_updated'] = gfa_per_use_updated.astype(int)
+    overview['gfa_per_use_ratio_updated'] = round(gfa_per_use_updated / gfa_per_use_updated.sum(), 5)
     overview['actual_add_gfa_per_use'] = overview['gfa_per_use_updated'] - overview['gfa_per_use_statusquo']
     overview['diff_add_gfa_per_use'] = overview['gfa_per_use_additional_target'] - overview['actual_add_gfa_per_use']
     overview_df = pd.DataFrame(overview)
     overview_df = pd.concat([overview_df, use_count_df], axis=1)
+    overview_df.fillna(0.0, inplace=True)
     # TODO: fill na with 0
     overview_df.to_csv(os.path.join(new_locator.get_input_folder(), new_scenario_name + "_overview.csv"))
     return
@@ -176,7 +177,7 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
     simulated_typology["1ST_USE_R"] = simulated_typology["1ST_USE_R"].astype(float)
     simulated_typology["2ND_USE_R"] = simulated_typology["2ND_USE_R"].astype(float)
     simulated_typology["3RD_USE_R"] = simulated_typology["3RD_USE_R"].astype(float)
-    simulated_typology["REFERENCE"] = status_quo_typology["REFERENCE_x"] 
+    simulated_typology["REFERENCE"] = status_quo_typology["REFERENCE_x"]
     use_col_dict = {i: column for i, column in enumerate(["1ST_USE", "2ND_USE", "3RD_USE"])}
     for b, sb in building_to_sub_building.items():
         updated_floor_per_use_col = dict()
