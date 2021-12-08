@@ -20,13 +20,13 @@ def main(config, typology_statusquo, case_inputs):
     typology_statusquo, typology_planned = remove_buildings_by_uses(typology_statusquo,
                                                                     uses_to_remove=[case_inputs['MULTI_RES_PLANNED']])
     gfa_per_use_statusquo = calc_gfa_per_use(typology_statusquo, "GFA_m2")
-    gfa_per_use_planned = calc_gfa_per_use(typology_planned, "GFA_m2") if typology_planned else None
-    gfa_res_planned = gfa_per_use_planned[case_inputs['MULTI_RES_PLANNED']] if gfa_per_use_planned else 0.0
+    gfa_per_use_planned = calc_gfa_per_use(typology_planned, "GFA_m2") if typology_planned is not None else None
+    gfa_res_planned = gfa_per_use_planned[case_inputs['MULTI_RES_PLANNED']] if gfa_per_use_planned is not None else 0.0
     # get overview
     overview = {}
     overview["gfa_per_use_statusquo"] = gfa_per_use_statusquo.astype(int)
     overview["gfa_ratio_per_use_statusquo"] = round(gfa_per_use_statusquo / gfa_per_use_statusquo.sum(), 5)
-    overview["gfa_per_use_planned"] = gfa_per_use_planned.astype(int) if gfa_per_use_planned else 0.0
+    overview["gfa_per_use_planned"] = gfa_per_use_planned.astype(int) if gfa_per_use_planned is not None else 0.0
     # TODO: KEEP "FUTURE RESERVED AREA" (ONLY FOOTPRINTS BUT NO HEIGHT) TO BUILD MULTI_RES (Altstetten)
     ## 2. Set Targets
     # get rel_ratio_to_res_gfa_target
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     worksheet = f"{config.remap_ville_scenarios.district_archetype}_{config.remap_ville_scenarios.urban_development_scenario}"
     case_study_inputs_df = pd.read_excel(path_to_case_study_inputs, sheet_name=worksheet).set_index('year')
     # future scenario
-    config.remap_ville_scenarios.year = 2040
+    config.remap_ville_scenarios.year = 2060
     config.remap_ville_scenarios.urban_development_scenario = 'BAU'
     s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}'
     case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
