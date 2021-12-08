@@ -3,6 +3,9 @@ import random
 
 import numpy as np
 import pandas as pd
+
+import cea.config
+import cea.inputlocator
 from remap_ville_plugin.utilities import calc_gfa_per_use
 
 PARAMS = {
@@ -206,7 +209,6 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
         gfa_per_use_future_target["SECONDARY_RES"] = gfa_per_use_future_target[
                                                          "SECONDARY_RES"] - SECONDARY_to_MULTI_RES_gfa
     else:
-        SECONDARY_to_MULTI_RES_gfa = 0.0
         gfa_per_use_future_target["SECONDARY_RES"] = 0.0
 
     return gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo
@@ -227,3 +229,25 @@ def read_mapping_use_ratio(config):
     mapping_df = pd.read_excel(path_to_mapping_table, sheet_name=worksheet).set_index("Scenario")
     rel_ratio_to_res_gfa_per_use = mapping_df.loc[urban_development_scenario].drop("Reference")
     return rel_ratio_to_res_gfa_per_use
+
+
+if __name__ == "__main__":
+    config = cea.config.Configuration()
+    # status-quo
+    config.project = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\Echallens'
+    config.scenario_name = 2020
+    locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    from remap_ville_plugin.urban_transformation_sequential import get_district_typology_merged
+    typology_statusquo = get_district_typology_merged(locator.get_input_folder())
+    print(locator.get_input_folder())
+    path_to_case_study_inputs = os.path.join(config.scenario, "case_study_inputs.xlsx")
+    worksheet = f"{config.remap_ville_scenarios.district_archetype}_{config.remap_ville_scenarios.urban_development_scenario}"
+    case_study_inputs_df = pd.read_excel(path_to_case_study_inputs, sheet_name=worksheet).set_index('year')
+    # future scenario
+    config.remap_ville_scenarios.year = 2040
+    config.remap_ville_scenarios.urban_development_scenario = 'BAU'
+    s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}'
+    case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
+    _, _, _, overview, _, _, _ = main(config, typology_statusquo, case_study_inputs)
+    pd.DataFrame(overview).to_csv(os.path.join(config.scenario, s_name+'_gfa_targets.csv'))
+
