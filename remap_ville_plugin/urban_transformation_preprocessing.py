@@ -6,28 +6,19 @@ import pandas as pd
 from remap_ville_plugin.utilities import calc_gfa_per_use
 
 PARAMS = {
-    'MULTI_RES_PLANNED': 'MULTI_RES_2040',
-    'additional_population': 1140,  # people
-    'current_SFH_occupant_density': 150,  # living space m2/occupants # FIXME: read from input scenario
-    'future_occupant_density': 80,  # living space m2/occupants # FIXME: get from CH_ReMaP
-    'USES_UNTOUCH': ['SINGLE_RES'],
-    'SINGLE_to_MULTI_RES_ratio': 0.0,
-    'preserve_buildings_built_before': 1920,
-    'building_height_limit': 42,  # m
-    # constants
+    'scenario_count': 10,
+    'lower_bound_floors': 0,
+    'upper_bound_floors': 50,
+    'floor_height': 3,
     'ratio_living_space_to_GFA': 0.82,
-    'floor_height': 3,  # m
-    'min_additional_floors': 0,
-    'max_additional_floors': 50,
-    'scenario_count': 10  # FIXME: advanced config parameter
 }
 
-def main(config, typology_statusquo):
+def main(config, typology_statusquo, case_inputs):
     typology_statusquo, typology_planned = remove_buildings_by_uses(typology_statusquo,
-                                                                    uses_to_remove=[PARAMS['MULTI_RES_PLANNED']])
+                                                                    uses_to_remove=[case_inputs['MULTI_RES_PLANNED']])
     gfa_per_use_statusquo = calc_gfa_per_use(typology_statusquo, "GFA_m2")
     gfa_per_use_planned = calc_gfa_per_use(typology_planned, "GFA_m2") if typology_planned else None
-    gfa_res_planned = gfa_per_use_planned[PARAMS['MULTI_RES_PLANNED']] if gfa_per_use_planned else 0.0
+    gfa_res_planned = gfa_per_use_planned[case_inputs['MULTI_RES_PLANNED']] if gfa_per_use_planned else 0.0
     # get overview
     overview = {}
     overview["gfa_per_use_statusquo"] = gfa_per_use_statusquo.astype(int)
@@ -40,7 +31,7 @@ def main(config, typology_statusquo):
         gfa_per_use_statusquo)  # FIXME: redundant since remove_buildings_by_uses
     gfa_per_use_statusquo, rel_ratio_to_res_gfa_target = calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, config)
     # get future required residential gfa
-    future_required_additional_res_gfa = calc_future_required_additional_res_gfa(PARAMS)
+    future_required_additional_res_gfa = calc_future_required_additional_res_gfa(case_inputs)
     # calculate future required gfa per use
     gfa_per_use_future_target = calc_gfa_per_use_future_target(future_required_additional_res_gfa,
                                                                gfa_per_use_statusquo,
@@ -58,7 +49,7 @@ def main(config, typology_statusquo):
     gfa_per_use_additional, \
     gfa_per_use_future_target, \
     typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional, gfa_per_use_future_target,
-                                                     typology_statusquo)
+                                                     typology_statusquo, case_inputs)
     # get gfa_per_use_additional_target
     gfa_per_use_additional_target = gfa_per_use_additional.astype(int).to_dict()
     gfa_total_additional_target = gfa_per_use_additional.sum()
@@ -122,8 +113,10 @@ def calc_rel_ratio_to_res_gfa_target(gfa_per_use_statusquo, config):
     return gfa_per_use_statusquo, rel_ratio_to_res_gfa_target
 
 
-def calc_future_required_additional_res_gfa(PARAMS):
-    future_required_additional_living_space = PARAMS['additional_population'] * PARAMS['future_occupant_density']
+def calc_future_required_additional_res_gfa(case_study_inputs):
+    additional_population = case_study_inputs['additional_population']
+    occupant_density = case_study_inputs['future_MFH_density']
+    future_required_additional_living_space = additional_population * occupant_density
     future_required_additional_res_gfa = future_required_additional_living_space / PARAMS[
         'ratio_living_space_to_GFA']
     return future_required_additional_res_gfa
@@ -153,9 +146,9 @@ def calc_gfa_per_use_future_target(future_required_additional_res_gfa,
     return gfa_per_use_future_target
 
 
-def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo):
+def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo, case_inputs):
     buildings_SINGLE_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SINGLE_RES'].index)
-    num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * PARAMS['SINGLE_to_MULTI_RES_ratio'])
+    num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * case_inputs['SINGLE_to_MULTI_RES_ratio'])
     if num_buildings_to_MULTI_RES > 0.0:
         print('Converting...', num_buildings_to_MULTI_RES, 'SINGLE_RES to MULTI_RES')
         buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
@@ -164,9 +157,9 @@ def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_fut
             building_gfa = typology_statusquo.loc[b]['GFA_m2']
             gfa_to_MULTI_RES += building_gfa
             num_occupants = round(
-                building_gfa * PARAMS["ratio_living_space_to_GFA"] / PARAMS["current_SFH_occupant_density"])
+                building_gfa * PARAMS["ratio_living_space_to_GFA"] / case_inputs["current_SFH_occupant_density"])
             extra_gfa = building_gfa - num_occupants * (
-                    PARAMS["future_occupant_density"] / PARAMS["ratio_living_space_to_GFA"])
+                    case_inputs["future_occupant_density"] / PARAMS["ratio_living_space_to_GFA"])
             extra_gfa_from_SINGLE_RES_conversion += extra_gfa # extra gfa to host additional population
             typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"SINGLE_RES": "MULTI_RES"})
         gfa_per_use_future_target["SINGLE_RES"] = gfa_per_use_future_target[

@@ -20,12 +20,12 @@ use_cols = ['MULTI_RES', 'SINGLE_RES', 'SECONDARY_RES', 'HOTEL', 'OFFICE', 'RETA
             'UNIVERSITY']
 
 
-def main(config, new_locator, scenario_locator_sequences):
+def main(config, new_locator, scenario_locator_sequences, case_study_inputs):
     print('\nStarting sequential urban transformation for', config.scenario_name)
     scenario_statusquo = list(scenario_locator_sequences.keys())[0]
     scenario_endstate = list(scenario_locator_sequences.keys())[-1]
     scenario_intermediate = config.scenario_name
-    print(f'...according to status-quo scenario: {scenario_statusquo} and end-state scenarios {scenario_endstate}')
+    print(f'...according to status-quo scenario: {scenario_statusquo} and end-state scenarios {scenario_endstate}\n')
     # 1. get projection
     typology_dict = {}
     for scenario_name, scenario_locator in scenario_locator_sequences.items():
@@ -36,7 +36,7 @@ def main(config, new_locator, scenario_locator_sequences):
     typology_statusquo = typology_dict[scenario_statusquo]
     gfa_per_use_future_target, gfa_per_use_additional_target, gfa_total_additional_target, \
     overview, rel_ratio_to_res_gfa_target, \
-    typology_planned, typology_statusquo = preprocessing.main(config, typology_statusquo)
+    typology_planned, typology_statusquo = preprocessing.main(config, typology_statusquo, case_study_inputs)
     missing_usetypes = set(use_cols) - set(gfa_per_use_future_target.index)
     gfa_per_use_intermediate = gfa_per_use_future_target.add(pd.Series(index=missing_usetypes), fill_value=0.0)
     gfa_per_use_intermediate = gfa_per_use_intermediate.fillna(0.0)
@@ -151,7 +151,7 @@ def write_selected_buildings_in_typology(building_usetype, selected_floors_to_re
             # find out if building changed from 2020
             # if yes, change year
             # if not, do nothing
-            typology_updated.loc[building, 'YEAR'] = 2040  # TODO: compare to 2020
+            typology_updated.loc[building, 'YEAR'] = 2040  # TODO: compare to 2020 or REDUNDANT?
     # calculate errors
     # gfa of building_usetype in typology_updated
     # buildings_not_yet_built = typology_updated[typology_updated['YEAR'] == 2060].index
@@ -229,7 +229,7 @@ def get_district_typology_merged(path_to_input):
     typology_merged['floors_all'] = typology_merged['floors_ag'] + typology_merged['floors_bg']
     for use_order in ['1ST_USE', '2ND_USE', '3RD_USE']:
         typology_merged["GFA_" + use_order] = typology_merged[use_order + "_R"] * typology_merged["GFA_m2"]
-        typology_merged[use_order + '_F'] = (typology_merged['floors_all'] * typology_merged[use_order + '_R']).astype(
+        typology_merged[use_order + '_F'] = (round(typology_merged['floors_all'] * typology_merged[use_order + '_R'])).astype(
             int)
     return typology_merged
 
@@ -261,6 +261,9 @@ if __name__ == "__main__":
     s_name = '2020'
     config.scenario_name = s_name
     scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    path_to_case_study_inputs = os.path.join(config.scenario, "case_study_inputs.xlsx")
+    worksheet = f"{config.remap_ville_scenarios.district_archetype}_{config.remap_ville_scenarios.urban_development_scenario}"
+    case_study_inputs_df = pd.read_excel(path_to_case_study_inputs, sheet_name=worksheet).set_index('year')
     s_name = '2060_PUN'
     config.scenario_name = s_name
     scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
@@ -270,8 +273,10 @@ if __name__ == "__main__":
     s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}_test'
     config.scenario_name = s_name
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
+    case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
     os.mkdir(config.scenario)
     os.mkdir(new_locator.get_input_folder())
     os.mkdir(new_locator.get_building_geometry_folder())
     os.mkdir(new_locator.get_building_properties_folder())
-    main(config, new_locator, scenario_locator_sequences)
+
+    main(config, new_locator, scenario_locator_sequences, case_study_inputs)

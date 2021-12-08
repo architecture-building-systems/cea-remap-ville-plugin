@@ -51,7 +51,8 @@ PARAMS = {
     'scenario_count': 10,
     'lower_bound_floors': 0,
     'upper_bound_floors': 50,
-    'floor_height': 3
+    'floor_height': 3,
+    'ratio_living_space_to_GFA': 0.82,
 }
 
 
@@ -69,7 +70,7 @@ def main(config, case_study_inputs_df):
     typology_statusquo = typology_merged.copy()
     gfa_per_use_future_target, gfa_per_use_additional_target, gfa_total_additional_target, \
     overview, rel_ratio_to_res_gfa_target, \
-    typology_planned, typology_statusquo = preprocessing.main(config, typology_statusquo)
+    typology_planned, typology_statusquo = preprocessing.main(config, typology_statusquo, case_study_inputs)
 
     ## 3. Finalize Inputs
     # filter out buildings by use
