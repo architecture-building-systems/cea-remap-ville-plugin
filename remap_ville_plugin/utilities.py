@@ -1,5 +1,6 @@
 import pandas as pd
 import shutil
+import operator
 from collections import defaultdict
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
 
@@ -45,6 +46,12 @@ def calc_gfa_per_use(typology_merged: pd.DataFrame, GFA_type="GFA_m2"):
 
     return pd.Series(gfa_per_use_type)
 
+def filter_buildings_by_year(typology_df: pd.DataFrame, year: int):
+    if "YEAR" not in typology_df:
+        raise KeyError("provided data frame is missing the column 'YEAR'")
+    typology_before_year = typology_df[operator.lt(typology_df.YEAR, year + 1)]
+    typology_after_year = typology_df[operator.gt(typology_df.YEAR, year)]
+    return typology_before_year, typology_after_year
 
 def typology_use_columns():
     return ["1ST_USE", "2ND_USE", "3RD_USE"]

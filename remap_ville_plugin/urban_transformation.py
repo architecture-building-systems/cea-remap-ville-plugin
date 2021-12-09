@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 import os
 import json
-import operator
 import geopandas as gpd
 from pathlib import Path
 from collections import defaultdict
@@ -14,7 +13,8 @@ import cea.config
 import cea.inputlocator
 from cea.demand.building_properties import calc_useful_areas
 from cea.utilities.dbf import dbf_to_dataframe
-from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns, count_usetype, save_updated_typology
+from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns, count_usetype, save_updated_typology, \
+    filter_buildings_by_year
 import remap_ville_plugin.area_optimization_mapper as amap
 from remap_ville_plugin.remap_setup_scenario import update_config
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
@@ -199,13 +199,14 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
         # write updated usetype ratio
         for use_col in updated_floor_per_use_col:
             use_statusquo = typology_statusquo.loc[b, use_col]
-            r_statusquo = typology_statusquo.loc[b, use_col+'_R']
+            r_statusquo = typology_statusquo.loc[b, use_col + '_R']
             use_updated = simulated_typology.loc[b, use_col]
             r_updated = updated_floor_per_use_col[use_col] / updated_floors
             if np.isclose(r_updated, 0.0):
                 use_updated = "NONE"
                 simulated_typology.loc[b, use_col] = use_updated
-            if r_updated > 0 and (use_statusquo, r_statusquo, current_floors) != (use_updated, r_updated, updated_floors):
+            if r_updated > 0 and (use_statusquo, r_statusquo, current_floors) != (
+            use_updated, r_updated, updated_floors):
                 # building that changes usetype or ratios
                 simulated_typology.loc[b, use_col + '_R'] = r_updated
                 simulated_typology.loc[b, 'YEAR'] = year
@@ -312,14 +313,6 @@ def calc_range_additional_floors_per_building(typology_status_quo, case_study_in
         min_floors, max_floors = height_limit_per_city_zone[building.city_zone]
         range_additional_floors_per_building[name] = [0, max(0, max_floors - building.floors_ag)]
     return range_additional_floors_per_building
-
-
-def filter_buildings_by_year(typology_df: pd.DataFrame, year: int):
-    if "YEAR" not in typology_df:
-        raise KeyError("provided data frame is missing the column 'YEAR'")
-    typology_before_year = typology_df[operator.lt(typology_df.YEAR, year + 1)]
-    typology_after_year = typology_df[operator.gt(typology_df.YEAR, year)]
-    return typology_before_year, typology_after_year
 
 
 def read_existing_uses(typology_merged):
