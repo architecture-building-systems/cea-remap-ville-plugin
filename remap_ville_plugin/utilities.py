@@ -13,6 +13,8 @@ def save_updated_typology(path_to_output_typology_file, simulated_typology):
     for column, column_type in columns_to_keep:
         keep.append(column)
         output[column] = output[column].astype(column_type)
+    if output.isnull().sum().sum() > 0:
+        raise ValueError('nan values in output')
     dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
     return
 

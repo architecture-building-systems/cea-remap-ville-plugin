@@ -321,6 +321,7 @@ def get_sample_data(new_locator):
     typology_merged["additional_floors"] = 0
     typology_merged["floors_ag_updated"] = typology_merged.floors_ag.astype(int)
     typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
+    typology_merged.fillna('-', inplace=True)
     return typology_merged
 
 
