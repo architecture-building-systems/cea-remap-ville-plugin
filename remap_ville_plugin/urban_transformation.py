@@ -31,23 +31,6 @@ __status__ = "Production"
 from urban_transformation_preprocessing import remove_buildings_by_uses
 
 PARAMS = {
-    'MULTI_RES_PLANNED': 'MULTI_RES_2040',
-    'additional_population': 1140,  # people
-    'current_SFH_occupant_density': 150,  # living space m2/occupants # FIXME: read from input scenario
-    'future_occupant_density': 80,  # living space m2/occupants # FIXME: get from CH_ReMaP
-    'USES_UNTOUCH': ['SINGLE_RES'],
-    'SINGLE_to_MULTI_RES_ratio': 0.0,
-    'preserve_buildings_built_before': 1920,
-    'building_height_limit': 42,  # m
-    # constants
-    'ratio_living_space_to_GFA': 0.82,
-    'floor_height': 3,  # m
-    'min_additional_floors': 0,
-    'max_additional_floors': 50,
-    'scenario_count': 10  # FIXME: advanced config parameter
-}
-
-PARAMS = {
     'scenario_count': 10,
     'lower_bound_floors': 0,
     'upper_bound_floors': 50,
@@ -254,7 +237,7 @@ def optimize_all_scenarios(range_additional_floors_per_building, scenarios, targ
             target_add_gfa_per_use,
             sub_building_use
         )
-        print("\n scenario [%i] is-success (if 1): [%i]" % (scenario, solution.sol_status))
+        print("scenario [%i] is-success (if 1): [%i]\n " % (scenario, solution.sol_status))
         # save solutions
         op_solutions[scenario] = {
             "solution": solution,
