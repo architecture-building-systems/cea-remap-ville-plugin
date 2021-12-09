@@ -160,11 +160,12 @@ def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_fut
             building_gfa = typology_statusquo.loc[b]['GFA_m2']
             gfa_to_MULTI_RES += building_gfa
             num_occupants = round(
-                building_gfa * PARAMS["ratio_living_space_to_GFA"] / case_inputs["current_SFH_occupant_density"])
+                building_gfa * PARAMS["ratio_living_space_to_GFA"] / case_inputs["current_SFH_density"])
             extra_gfa = building_gfa - num_occupants * (
-                    case_inputs["future_occupant_density"] / PARAMS["ratio_living_space_to_GFA"])
+                    case_inputs["future_MFH_density"] / PARAMS["ratio_living_space_to_GFA"])
             extra_gfa_from_SINGLE_RES_conversion += extra_gfa # extra gfa to host additional population
             typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"SINGLE_RES": "MULTI_RES"})
+            typology_statusquo.loc[b, 'REFERENCE_x'] = 'from SINGLE_RES'
         gfa_per_use_future_target["SINGLE_RES"] = gfa_per_use_future_target[
                                                                "SINGLE_RES"] - gfa_to_MULTI_RES
         gfa_per_use_additional_required["MULTI_RES"] = gfa_per_use_additional_required[
@@ -202,6 +203,7 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
         buildings_to_MULTI_RES = delta_gfa_dict[min(delta_gfa_dict.keys())]
         print('Converting...', len(buildings_to_MULTI_RES), 'SECONDARY_RES to MULTI_RES')
         typology_statusquo.loc[buildings_to_MULTI_RES, '1ST_USE'] = 'MULTI_RES'
+        typology_statusquo.loc[buildings_to_MULTI_RES, 'REFERENCE_x'] = 'from SECONDARY_RES'
         SECONDARY_to_MULTI_RES_gfa = typology_statusquo.loc[buildings_to_MULTI_RES]['GFA_m2'].sum()
         gfa_per_use_additional_required['MULTI_RES'] = max(
             required_MULTI_RES_gfa - SECONDARY_to_MULTI_RES_gfa, 0)

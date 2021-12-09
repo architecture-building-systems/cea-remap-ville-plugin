@@ -79,8 +79,9 @@ def main(config):
     # copy air conditioning and supply system
     copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
     copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
-    case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
-    sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences, case_study_inputs)
+    scenario_year = int(config.remap_ville_scenarios.year)
+    case_study_inputs = case_study_inputs_df.loc[scenario_year]
+    sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences, case_study_inputs, scenario_year)
 
     # TODO: update use_types in the technology folder!!!
 
