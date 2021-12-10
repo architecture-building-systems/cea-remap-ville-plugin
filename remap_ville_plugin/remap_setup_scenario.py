@@ -44,28 +44,8 @@ def main(config):
     urban_transformation.main(config, case_study_inputs_df)
 
     # modify dbf
-    print(f"Modifying building properties in... {year}")
-    # copy air conditioning and supply system
-    copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
-    copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
-    typology_df = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name')
-    # update air-conditioning according to use
-    MULTI_RES_2040, ORIG_RES, OTHER_USES = get_building_lists_by_use(typology_df)
-    airconditioning_df = dbf_to_dataframe(new_locator.get_building_air_conditioning()).set_index('Name')
-    airconditioning_df = update_air_conditioning_dbf(MULTI_RES_2040, ORIG_RES, OTHER_USES, airconditioning_df)
-    save_dbfs(airconditioning_df, new_locator.get_building_air_conditioning())
-    # update supply system according to use
-    supply_df = dbf_to_dataframe(new_locator.get_building_supply()).set_index('Name')
-    supply_df.loc[:, 'type_cs'] = 'SUPPLY_COOLING_AS1'
-    save_dbfs(supply_df, new_locator.get_building_supply())
-    # update architecture for MULTI_RES_2040
-    architecture_df = dbf_to_dataframe(new_locator.get_building_architecture()).set_index('Name')
-    architecture_df = update_architecture_dbf(MULTI_RES_2040, architecture_df)
-    save_dbfs(architecture_df, new_locator.get_building_architecture())
-    # technology
-    district_archetype = config.remap_ville_scenarios.district_archetype
-    folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
-    create_input_technology_folder(folder_name, new_locator)
+    modify_building_properties_after_urban_transformation(new_locator, year)
+    create_technology_folder(config, new_locator, urban_development_scenario, year)
 
     ## 3. Urban Transformation (2040)
     config.scenario_name = '2060_'+urban_development_scenario
@@ -84,6 +64,31 @@ def main(config):
     sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences, case_study_inputs, scenario_year)
 
     # TODO: update use_types in the technology folder!!!
+
+
+def create_technology_folder(config, new_locator, urban_development_scenario, year):
+    district_archetype = config.remap_ville_scenarios.district_archetype
+    folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
+    print(f'Creating technology folder from database: {folder_name}')
+    create_input_technology_folder(folder_name, new_locator)
+
+
+def modify_building_properties_after_urban_transformation(new_locator, year):
+    print(f"Modifying building properties in... {year}")
+    typology_df = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name')
+    # update air-conditioning according to use
+    MULTI_RES_2040, ORIG_RES, OTHER_USES = get_building_lists_by_use(typology_df)
+    airconditioning_df = dbf_to_dataframe(new_locator.get_building_air_conditioning()).set_index('Name')
+    airconditioning_df = update_air_conditioning_dbf(MULTI_RES_2040, ORIG_RES, OTHER_USES, airconditioning_df)
+    save_dbfs(airconditioning_df, new_locator.get_building_air_conditioning())
+    # update supply system according to use
+    supply_df = dbf_to_dataframe(new_locator.get_building_supply()).set_index('Name')
+    supply_df.loc[:, 'type_cs'] = 'SUPPLY_COOLING_AS1'
+    save_dbfs(supply_df, new_locator.get_building_supply())
+    # update architecture for MULTI_RES_2040
+    architecture_df = dbf_to_dataframe(new_locator.get_building_architecture()).set_index('Name')
+    architecture_df = update_architecture_dbf(MULTI_RES_2040, architecture_df)
+    save_dbfs(architecture_df, new_locator.get_building_architecture())
 
 
 def check_case_study_inputs(config, path_to_case_study_inputs):
@@ -114,6 +119,8 @@ def copy_inputs_folder_content(old_locator, new_locator):
     os.mkdir(new_locator.get_building_properties_folder())
     copy_file(old_locator.get_building_typology(), new_locator.get_building_typology())
     copy_file(old_locator.get_building_architecture(), new_locator.get_building_architecture())
+    copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
+    copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
 
 
 def update_config(config):
@@ -157,17 +164,16 @@ def update_air_conditioning_dbf(MULTI_RES_2040, ORIG_RES, OTHER_USES, airconditi
 
 def get_building_lists_by_use(typology_df):
     _RES = list(typology_df[typology_df['1ST_USE'].str.contains("_RES")].index)
-    print('_RES', len(_RES))
     MULTI_RES_2040 = list(typology_df[typology_df['1ST_USE'] == 'MULTI_RES_2040'].index)
-    print('MULTI_RES_2040', len(MULTI_RES_2040))
     ORIG_RES = list(set(_RES) - set(MULTI_RES_2040))
-    print('ORIG_RES', len(ORIG_RES))
     OTHER_USES = list(set(typology_df.index) - set(_RES))
-    print('OTHER_USES', len(OTHER_USES))
+    print(f'RES: {len(_RES)}; MULTI_RES_2040: {len(MULTI_RES_2040)}; ORIG_RES: {len(ORIG_RES)}')
+    print(f'OTHER_USES: {len(OTHER_USES)}')
     return MULTI_RES_2040, ORIG_RES, OTHER_USES
 
 
 def initialize_input_folder(config, new_locator):
+    print(f'\nInitializing {config.scenario}')
     if os.path.exists(config.scenario):
         raise ValueError(f"{config.scenario} exists, please remove the folder before proceeding.")
         # shutil.rmtree(config.scenario)
