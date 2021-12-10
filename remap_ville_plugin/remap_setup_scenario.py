@@ -12,7 +12,7 @@ from remap_ville_plugin.create_technology_database import copy_file
 import remap_ville_plugin.urban_transformation as urban_transformation
 import remap_ville_plugin.urban_transformation_sequential as sequential_urban_transformation
 from remap_ville_plugin.utilities import copy_folder
-from remap_ville_plugin.create_technology_database import create_input_technology_folder
+from remap_ville_plugin.create_technology_database import create_input_technology_folder, update_indoor_comfort
 
 __author__ = "Shanshan Hsieh"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -46,6 +46,7 @@ def main(config):
     # modify dbf
     modify_building_properties_after_urban_transformation(new_locator, year)
     create_technology_folder(config, new_locator, urban_development_scenario, year)
+    update_indoor_comfort('SQ', new_locator)
 
     ## 3. Urban Transformation (2040)
     config.scenario_name = '2060_'+urban_development_scenario

@@ -11,7 +11,7 @@ import cea.config
 import cea.inputlocator
 from cea.utilities.dbf import dbf_to_dataframe
 from remap_ville_plugin.utilities import save_updated_typology, filter_buildings_by_year, order_uses_in_typology
-from remap_ville_plugin.create_technology_database import create_input_technology_folder
+from remap_ville_plugin.create_technology_database import create_input_technology_folder, update_indoor_comfort
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
 
 path_to_folder = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\Echallens'
@@ -112,6 +112,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
     folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
     create_input_technology_folder(folder_name, new_locator)
+    update_indoor_comfort('SQ', new_locator)
 
 
 def revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict, typology_updated, typology_endstate):
@@ -263,8 +264,8 @@ def optimization_problem(building_usetype, floors_of_usetype, footprint_of_usety
 
     # Define Objective Function
     sub_building_footprint_area = footprint_of_usetype
-    opt_problem += pulp.lpSum([x_floors[i] * sub_building_footprint_area[i]
-                               for i in target_variables])  # objective
+    objective = [x_floors[i] * sub_building_footprint_area[i] for i in target_variables]
+    opt_problem += pulp.lpSum(objective)  # objective
 
     # Define Constraints
     opt_problem += pulp.lpSum([x_floors[i] * sub_building_footprint_area[i]
