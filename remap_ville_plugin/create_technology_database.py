@@ -5,8 +5,6 @@ scenario.
 import os
 import shutil
 import win32com.client
-o = win32com.client.Dispatch("Excel.Application")
-o.Visible = False
 import glob
 
 import cea.config
@@ -40,6 +38,8 @@ def create_input_technology_folder(folder_name, locator):
     copy_assemblies_folder(database_root, locator)
     # .xlsx
     print("saving .xlsx")
+    o = win32com.client.Dispatch("Excel.Application")
+    o.Visible = False
     input_dir = os.path.join(locator.get_databases_assemblies_folder())
     output_dir = input_dir
     files = glob.glob(input_dir + "/*.xls")
@@ -50,6 +50,7 @@ def create_input_technology_folder(folder_name, locator):
         wb = o.Workbooks.Open(filename)
         wb.ActiveSheet.SaveAs(output, 51)
         wb.Close(True)
+    o.Quit()
     print(f"Creating components...")
     copy_components_folder(database_root, locator)
     print(f"Creating archetypes/construction standards...")

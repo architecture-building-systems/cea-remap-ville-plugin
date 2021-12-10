@@ -317,7 +317,7 @@ def get_gfa_per_usetype(typology_merged, key):
 
 if __name__ == "__main__":
     config = cea.config.Configuration()
-    config.project = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\echallens_new'
+    config.project = r'Z:\03-Research\01-Projects\30_VILLE\CEA_Projects\_CaseStudies\Echallens\CEA_inputs'
 
     scenario_locator_sequences = {}
     s_name = '2020_planned'
