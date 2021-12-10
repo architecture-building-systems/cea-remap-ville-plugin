@@ -34,19 +34,21 @@ def main(config):
     locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
 
     # FIXME: work around to copy construction standard, should be deleted before merging
-    print(f"Creating construction standards...")
-    database_root = os.path.join(os.path.dirname(__file__), "CH_ReMaP")
-    copy_file(os.path.join(database_root, "archetypes", "CONSTRUCTION_STANDARD_SUMMARY.xlsx"),
-              locator.get_database_construction_standards())
-    print(f"Creating assemblies...")
-    copy_assemblies_folder(database_root, locator)
+    # print(f"Creating construction standards...")
+    # database_root = os.path.join(os.path.dirname(__file__), "CH_ReMaP")
+    # copy_file(os.path.join(database_root, "archetypes", "CONSTRUCTION_STANDARD_SUMMARY.xlsx"),
+    #           locator.get_database_construction_standards())
+    # print(f"Creating assemblies...")
+    # copy_assemblies_folder(database_root, locator)
+    #
+    # print(f"Creating use types...")
+    # urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
+    # folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
+    # print(folder_name)
+    # copy_use_types(database_root, folder_name, locator)
+    # # FIXME: END OF HACK
 
-    print(f"Creating use types...")
-    urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
-    folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
-    print(folder_name)
-    copy_use_types(database_root, folder_name, locator)
-    # FIXME: END OF HACK
+    ## TODO: change INDOOR_COMFORT according to retrofit scenarios
 
     mapping = read_mapping()
     print('\n modifying typology in...', locator.get_building_typology())
@@ -86,7 +88,8 @@ def do_mapping(mapping, old_standard, district_archetype, use_type, year, constr
 
 def read_mapping():
     """
-    Create a dictionary version of the mapping because it's easier to use...
+    Read construction standards according to district, use_type, year, retrofit scenarios
+    TODO: at the moment, all retrofit scenarios have the same construction standard
     :return:
     """
     mapping_df = pd.read_excel(os.path.join(os.path.dirname(__file__), "mapping_CONSTRUCTION_STANDARD.xlsx"))
