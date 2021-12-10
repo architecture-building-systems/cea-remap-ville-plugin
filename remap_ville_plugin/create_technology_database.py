@@ -40,6 +40,7 @@ def create_input_technology_folder(folder_name, locator):
     print("saving .xlsx")
     o = win32com.client.Dispatch("Excel.Application")
     o.Visible = False
+    o.DisplayAlerts = False
     input_dir = os.path.join(locator.get_databases_assemblies_folder())
     output_dir = input_dir
     files = glob.glob(input_dir + "/*.xls")
