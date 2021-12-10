@@ -56,8 +56,9 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     typology_endstate = typology_after_year.copy()
     typology_updated = typology_endstate.copy()
     # revert MULTI_RES to SINGLE_RES
-    typology_updated, diff_gfa = revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict,
-                                                                typology_updated)
+    typology_updated, typology_endstate, diff_gfa = revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo,
+                                                                                   typology_dict,
+                                                                                   typology_updated, typology_endstate)
     buildings_modified = set()
     for usetype in diff_gfa.index:
         print('\n', usetype, 'GFA to reduce', round(diff_gfa[usetype], 1))
@@ -113,7 +114,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     create_input_technology_folder(folder_name, new_locator)
 
 
-def revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict, typology_updated):
+def revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict, typology_updated, typology_endstate):
     if diff_gfa['SINGLE_RES'] < 0:
         avail_MULTI_RES_buildings = \
             typology_updated[typology_updated['REFERENCE_x'] == 'from SINGLE_RES'][typology_updated['1ST_USE_R'] >= 1][
@@ -140,7 +141,8 @@ def revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict, 
                                                            buildings_to_SINGLE_RES, :]
         diff_gfa['SINGLE_RES'] = 0.0
         diff_gfa['MULTI_RES'] = diff_gfa['MULTI_RES'] - MULTI_to_SINGLE_RES_gfa
-    return typology_updated, diff_gfa
+        typology_endstate = typology_endstate.drop(buildings_to_SINGLE_RES)
+    return typology_updated, typology_endstate, diff_gfa
 
 
 def modify_typology_per_building_usetype(usetype, typology_updated, typology_endstate, diff_gfa, scenario_year):
