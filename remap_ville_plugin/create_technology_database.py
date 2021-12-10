@@ -4,6 +4,10 @@ scenario.
 """
 import os
 import shutil
+import win32com.client
+o = win32com.client.Dispatch("Excel.Application")
+o.Visible = False
+import glob
 
 import cea.config
 import cea.inputlocator
@@ -34,12 +38,24 @@ def create_input_technology_folder(folder_name, locator):
     database_root = os.path.join(os.path.dirname(__file__), "CH_ReMaP")
     print(f"Creating assemblies...")
     copy_assemblies_folder(database_root, locator)
+    # .xlsx
+    print("saving .xlsx")
+    input_dir = os.path.join(locator.get_databases_assemblies_folder())
+    output_dir = input_dir
+    files = glob.glob(input_dir + "/*.xls")
+    for filename in files:
+        print(filename)
+        file = os.path.basename(filename)
+        output = output_dir + '/' + file.replace('.xls', '.xlsx')
+        wb = o.Workbooks.Open(filename)
+        wb.ActiveSheet.SaveAs(output, 51)
+        wb.Close(True)
     print(f"Creating components...")
     copy_components_folder(database_root, locator)
-    print(f"Creating construction standards...")
+    print(f"Creating archetypes/construction standards...")
     copy_file(os.path.join(database_root, "archetypes", "CONSTRUCTION_STANDARD_SUMMARY.xlsx"),
               locator.get_database_construction_standards())
-    print(f"Creating use types...")
+    print(f"Creating archetypes/use_types...")
     copy_use_types(database_root, folder_name, locator)
 
 
