@@ -51,6 +51,7 @@ def create_input_technology_folder(folder_name, locator):
         wb.ActiveSheet.SaveAs(output, 51)
         wb.Close(True)
     o.Quit()
+    del o
     print(f"Creating components...")
     copy_components_folder(database_root, locator)
     print(f"Creating archetypes/construction standards...")
