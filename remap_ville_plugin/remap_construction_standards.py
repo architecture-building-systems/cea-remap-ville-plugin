@@ -7,14 +7,13 @@ Map the field ``typology.df:STANDARD`` to the new value, based on:
 This can be done on a new scenario, _before_ running archetypes-mapper.
 """
 import os
-import win32com.client
 import pandas as pd
 
 import cea.config
 import cea.inputlocator
 import cea.utilities.dbf
 import cea.datamanagement.archetypes_mapper
-from remap_ville_plugin.create_technology_database import copy_file, copy_assemblies_folder, copy_use_types
+from remap_ville_plugin.create_technology_database import update_indoor_comfort, copy_file, copy_assemblies_folder, copy_use_types
 
 __author__ = "Daren Thomas"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -78,32 +77,6 @@ def main(config):
         update_schedule_operation_cea=False,
         buildings=buildings)
     print('\n Building properties are updated!')
-
-
-def update_indoor_comfort(RF_scenario, locator):
-    # call excel application
-    o = win32com.client.Dispatch("Excel.Application")
-    o.Visible = False
-    o.DisplayAlerts = False
-    # read INDOOR_COMFORT_SUMMARY
-    path_summary = os.path.join(os.path.dirname(__file__), "CH_ReMaP", "archetypes", "INDOOR_COMFORT_SUMMARY.xlsx")
-    wb_summary = o.Workbooks.Open(path_summary)
-    ws_summary = wb_summary.Sheets(RF_scenario)
-    # modify USE_TYPE_PROPERTIES
-    path_orig = locator.get_database_use_types_properties()
-    wb = o.Workbooks.Open(path_orig)
-    print([sheet.Name for sheet in wb.Sheets])
-    # delete INDOOR_COMFORT
-    for sheet in wb.Worksheets:
-        if sheet.Name == 'INDOOR_COMFORT':
-            sheet.Delete()
-    print([sheet.Name for sheet in wb.Sheets])
-    ws_comfort = wb.Worksheets.Add()
-    ws_comfort.Name = 'INDOOR_COMFORT'
-    ws_summary.Range("A1:AF100").Copy(ws_comfort.Range("A1:AF100"))
-    wb.Close(True)  # close and save changes
-    o.Quit()
-    del o
 
 
 def do_mapping(mapping, old_standard, district_archetype, use_type, year, construction):
