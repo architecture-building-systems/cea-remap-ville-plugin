@@ -48,6 +48,11 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     # remove 'MULTI_RES_PLANNED' from target
     diff_gfa['MULTI_RES'] = diff_gfa['MULTI_RES'] - diff_gfa[case_study_inputs['MULTI_RES_PLANNED']]
     diff_gfa = diff_gfa.drop(labels=case_study_inputs['MULTI_RES_PLANNED'])
+    for use in diff_gfa.index:
+        if np.isclose(gfa_per_use_years_df.loc[scenario_endstate,use], gfa_per_use_years_df.loc[scenario_statusquo,use]):
+            diff_gfa[use] = 0.0
+            print(f'diff_gfa for {use} is set to 0.0')
+
     # 3. modify buildings
     typology_endstate = typology_dict[scenario_endstate]
     # remove preserved buildings
@@ -320,7 +325,7 @@ def get_gfa_per_usetype(typology_merged, key):
 
 if __name__ == "__main__":
     config = cea.config.Configuration()
-    config.project = r'Z:\03-Research\01-Projects\30_VILLE\CEA_Projects\_CaseStudies\Echallens\CEA_inputs'
+    config.project = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\echallens_new'
 
     scenario_locator_sequences = {}
     s_name = '2020_planned'
