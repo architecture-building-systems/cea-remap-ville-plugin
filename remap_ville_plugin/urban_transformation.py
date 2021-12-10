@@ -14,7 +14,7 @@ import cea.inputlocator
 from cea.demand.building_properties import calc_useful_areas
 from cea.utilities.dbf import dbf_to_dataframe
 from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns, count_usetype, save_updated_typology, \
-    filter_buildings_by_year
+    filter_buildings_by_year, order_uses_in_typology
 import remap_ville_plugin.area_optimization_mapper as amap
 from remap_ville_plugin.remap_setup_scenario import update_config
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
@@ -130,6 +130,7 @@ def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_buildin
     zone_shp_updated["height_ag"] = best_typology_df["height_ag_updated"]
     zone_shp_updated["REFERENCE"] = "after-optimization"
     zone_shp_updated.to_file(path_to_output_zone_shape_file)
+    print(f'zone.shp updated: {path_to_output_zone_shape_file}')
     return floors_ag_updated, zone_shp_updated
 
 
@@ -197,7 +198,7 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
                 #     # update MULTI_RES use-type properties
                 #     if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
                 #         simulated_typology.loc[b, use_col] = 'MULTI_RES_2040'  # FIXME: hard-coded, MAYBE REDUNDANT
-
+    simulated_typology = order_uses_in_typology(simulated_typology)
     save_updated_typology(path_to_output_typology_file, simulated_typology)
 
 

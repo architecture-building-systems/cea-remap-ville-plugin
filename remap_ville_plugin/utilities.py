@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import shutil
 import operator
 from collections import defaultdict
@@ -16,6 +17,7 @@ def save_updated_typology(path_to_output_typology_file, simulated_typology):
     if output.isnull().sum().sum() > 0:
         raise ValueError('nan values in output')
     dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
+    print(f'typology.dbf updated: {str(path_to_output_typology_file.absolute())}')
     return
 
 def copy_folder(src, dst):
@@ -62,3 +64,28 @@ def count_usetype(typology_updated):
     use_count_df = typology_updated[['1ST_USE', '2ND_USE', '3RD_USE']]
     use_count_df = use_count_df.apply(pd.value_counts)
     return use_count_df
+
+
+def order_uses_in_typology(typology_df):
+    ordered_typology_df = typology_df.copy()
+    mixed_use_buildings = typology_df[typology_df['1ST_USE_R'] < 1.0].index
+    for building in mixed_use_buildings:
+        ratios = typology_df.loc[building, ['1ST_USE_R', '2ND_USE_R', '3RD_USE_R']].values
+        uses = typology_df.loc[building, ['1ST_USE', '2ND_USE', '3RD_USE']].values
+        order = np.argsort(ratios)
+        ordered_ratios = [ratios[order[-1]], ratios[order[-2]], ratios[order[-3]]]
+        ordered_uses = [uses[order[-1]], uses[order[-2]], uses[order[-3]]]
+        # set use to NONE
+        for i, ratio in enumerate(ordered_ratios):
+            if ratio == 0.0:
+                ordered_uses[i] = 'NONE'
+        # move parking back
+        if ordered_uses[0] == 'PARKING' and ordered_uses[1] != 'NONE':
+            ordered_uses = [ordered_uses[1], ordered_uses[0], ordered_uses[2]]
+            ordered_ratios = [ordered_ratios[1], ordered_ratios[0], ordered_ratios[2]]
+        # write back to dbf_df
+        for i, use_order in enumerate(['1ST_USE', '2ND_USE', '3RD_USE']):
+            ordered_typology_df.loc[building, use_order] = ordered_uses[i]
+            ordered_typology_df.loc[building, use_order + '_R'] = ordered_ratios[i]
+    return ordered_typology_df
+

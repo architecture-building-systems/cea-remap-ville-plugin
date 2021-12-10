@@ -10,7 +10,7 @@ import random
 import cea.config
 import cea.inputlocator
 from cea.utilities.dbf import dbf_to_dataframe
-from remap_ville_plugin.utilities import save_updated_typology, filter_buildings_by_year
+from remap_ville_plugin.utilities import save_updated_typology, filter_buildings_by_year, order_uses_in_typology
 from remap_ville_plugin.create_technology_database import create_input_technology_folder
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
 
@@ -83,6 +83,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     typology_save.loc[buildings_modified, 'REFERENCE'] = 'sequential-transformation'
     # TODO: add back the buildings untouched
     typology_save_reindex = typology_save.reset_index()
+    typology_save_reindex = order_uses_in_typology(typology_save_reindex)
     save_updated_typology(Path(new_locator.get_building_typology()), typology_save_reindex)
     print(new_locator.get_building_typology())
     # zone
@@ -102,7 +103,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
         raise ValueError('nan values in zone_updated')
     zone_updated.to_file(new_locator.get_zone_geometry())
     # TODO: add back the buildings untouched
-    print(new_locator.get_zone_geometry())
+    print(f'zone.shp updates...{new_locator.get_zone_geometry()}')
 
     # create technology folder
     district_archetype = config.remap_ville_scenarios.district_archetype
