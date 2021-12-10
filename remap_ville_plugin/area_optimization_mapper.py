@@ -26,11 +26,11 @@ __status__ = "Production"
 
 incompatible_use_types = {
     "COOLROOM": ["SINGLE_RES"],
-    "FOODSTORE": ["SINGLE_RES"],
+    "FOODSTORE": ["SINGLE_RES", "INDUSTRIAL"],
     "GYM": ["SINGLE_RES"],
     "HOTEL": ["SCHOOL", "SINGLE_RES"],
     "HOSPITAL": ["MULTI_RES", "INDUSTRIAL", "SCHOOL", "SINGLE_RES"],
-    "INDUSTRIAL": ["MULTI_RES", "HOSPITAL", "SCHOOL", "LIBRARY", "MUSEUM", "UNIVERSITY", "SINGLE_RES"],
+    "INDUSTRIAL": ["MULTI_RES", "HOSPITAL", "SCHOOL", "LIBRARY", "MUSEUM", "UNIVERSITY", "SINGLE_RES", "FOODSTORE"],
     "LIBRARY": ["INDUSTRIAL", "SINGLE_RES"],
     "MULTI_RES": ["INDUSTRIAL", "SERVERROOM", "SWIMMING", "UNIVERSITY", "COOLROOM", "MUSEUM", "SCHOOL",
                   "HOSPITAL", "SINGLE_RES"],
@@ -40,6 +40,7 @@ incompatible_use_types = {
     "RESTAURANT": ["SINGLE_RES"],
     "SCHOOL": ["INDUSTRIAL", "HOSPITAL", "HOTEL", "FOODSTORE", "RETAIL", "RESTAURANT", "MULTI_RES", "SINGLE_RES"],
     "SERVERROOM": ["MULTI_RES", "SINGLE_RES"],
+    "SINGLE_RES": ["INDUSTRIAL", "MULTI_RES", "FOODSTORE", "PARKING"],
     "SWIMMING": ["SINGLE_RES"],
     "UNIVERSITY": ["SINGLE_RES"],
 }
@@ -148,14 +149,14 @@ def detailed_result_metrics(
         abs_error, rel_error = calculate_result_metrics(solution, target, sub_building_footprint_area)
         for use in result_add_gfa_per_use:
             if target_add_gfa_per_use[use] > 0:
-                print("use [%s] actual [%.1f] vs. target [%.1f]" % (
-                    use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
                 use_abs_error = abs(target_add_gfa_per_use[use] - result_add_gfa_per_use[use])
                 try:
                     use_rel_error = use_abs_error / target_add_gfa_per_use[use]
                 except ZeroDivisionError as e:
                     use_rel_error = 0.0
-                print("    abs. error [%.1f]; rel. error [%.3f]" % (use_abs_error, use_rel_error))
+                # print("use [%s] actual [%.1f] vs. target [%.1f]" % (
+                #     use, result_add_gfa_per_use[use], target_add_gfa_per_use[use]))
+                # print("    abs. error [%.1f]; rel. error [%.3f]" % (use_abs_error, use_rel_error))
                 metrics[use] = {"result": int(result_add_gfa_per_use[use]),
                                 "target": int(target_add_gfa_per_use[use])}
     else:
