@@ -66,7 +66,7 @@ def main(config, case_study_inputs_df):
     # final typology_input to be optimized
     typology_input = typology_after_year.copy()
     # set constraints
-    range_additional_floors_per_building = calc_range_additional_floors_per_building(typology_input, case_study_inputs)
+    range_additional_floors_per_building = calc_range_additional_floors_per_building(typology_input, case_study_inputs, config)
     possible_uses_per_cityzone = update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target)
     # create random scenarios
     scenarios = amap.randomize_scenarios(typology_merged=typology_input, usetype_constraints=possible_uses_per_cityzone,
@@ -284,17 +284,19 @@ def get_possible_uses_per_cityzone():
     }
 
 
-def calc_range_additional_floors_per_building(typology_status_quo, case_study_inputs):
-    height_limit_per_city_zone = {
-        0: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
-        1: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
-        2: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
-        3: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height'])}  # FIXME
-    # height_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26),
-    #                               3: (0, 13)}  # FIXME: this only applies to Altstetten
+def calc_range_additional_floors_per_building(typology_status_quo, case_study_inputs, config):
+    district_archetype =  config.remap_ville_scenarios.district_archetype
+    if district_archetype == 'URB' and 'city_zone' in typology_status_quo.columns:
+        floor_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26), 3: (0, 13)}  # FIXME: hard-coded for Altstetten
+    else:
+        floor_limit_per_city_zone = {
+            0: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
+            1: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
+            2: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
+            3: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height'])}
     range_additional_floors_per_building = dict()
     for name, building in typology_status_quo.iterrows():
-        min_floors, max_floors = height_limit_per_city_zone[building.city_zone]
+        min_floors, max_floors = floor_limit_per_city_zone[building.city_zone]
         range_additional_floors_per_building[name] = [0, max(0, max_floors - building.floors_ag)]
     return range_additional_floors_per_building
 
