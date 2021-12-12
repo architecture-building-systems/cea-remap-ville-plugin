@@ -21,7 +21,7 @@ use_cols = ['MULTI_RES', 'SINGLE_RES', 'SECONDARY_RES', 'HOTEL', 'OFFICE', 'RETA
             'UNIVERSITY']
 
 
-def main(config, new_locator, scenario_locator_sequences, case_study_inputs, scenario_year):
+def main(config, new_locator, scenario_locator_sequences, case_study_inputs, scenario_year, year_endstate):
     print('\nStarting sequential urban transformation for', config.scenario_name)
     scenario_statusquo = list(scenario_locator_sequences.keys())[0]
     scenario_endstate = list(scenario_locator_sequences.keys())[-1]
@@ -64,7 +64,13 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     # revert MULTI_RES to SINGLE_RES
     typology_updated, typology_endstate, diff_gfa = revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo,
                                                                                    typology_dict,
-                                                                                   typology_updated, typology_endstate)
+                                                                                   typology_updated, typology_endstate,
+                                                                                   year_endstate)
+    # revert MULTI_RES to OFFICE
+    typology_updated, typology_endstate, diff_gfa = revert_MULTI_RES_to_OFFICE(diff_gfa, scenario_statusquo,
+                                                                               typology_dict,
+                                                                               typology_updated, typology_endstate,
+                                                                               year_endstate)
     buildings_modified = set()
     for usetype in diff_gfa.index:
         print('\n', usetype, 'GFA to reduce', round(diff_gfa[usetype], 1))
@@ -119,11 +125,42 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     update_indoor_comfort('SQ', new_locator)
 
 
-def revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict, typology_updated, typology_endstate):
+def revert_MULTI_RES_to_OFFICE(diff_gfa, scenario_statusquo, typology_dict, typology_updated, typology_endstate, year_endstate):
+    if diff_gfa['OFFICE'] < 0:
+        avail_MULTI_RES_buildings = \
+            typology_updated[typology_updated['REFERENCE_x'] == 'from OFFICE'][typology_updated['1ST_USE_R'] >= 1][
+                typology_updated['YEAR'] < year_endstate].index # single-use MULTI_RES that is not modified in year_endstate
+        total_avail_gfa_to_OFFICE = typology_dict[scenario_statusquo].loc[avail_MULTI_RES_buildings]['GFA_m2'].sum()
+        if total_avail_gfa_to_OFFICE > abs(diff_gfa['MULTI_RES']):
+            delta_gfa_dict = {}
+            for i in range(20):
+                num_sampled_buildings = random.randrange(0, len(avail_MULTI_RES_buildings))
+                sampled_buildings = random.sample(list(avail_MULTI_RES_buildings), num_sampled_buildings)
+                gfa_to_SINGLE_RES = 0.0
+                for b in sampled_buildings:
+                    building_gfa = typology_dict[scenario_statusquo].loc[b]['GFA_m2']
+                    gfa_to_SINGLE_RES += building_gfa
+                delta_gfa = abs(round(abs(diff_gfa['SINGLE_RES']) - gfa_to_SINGLE_RES, 2))
+                delta_gfa_dict[delta_gfa] = sampled_buildings
+            buildings_to_SINGLE_RES = delta_gfa_dict[min(delta_gfa_dict.keys())]
+        else:
+            buildings_to_SINGLE_RES = avail_MULTI_RES_buildings
+        print('Reverting...', len(buildings_to_SINGLE_RES), 'MULTI_RES to SINGLE_RES')
+        MULTI_to_SINGLE_RES_gfa = typology_updated.loc[buildings_to_SINGLE_RES]['GFA_m2'].sum()
+        # write typology
+        typology_updated.loc[buildings_to_SINGLE_RES, :] = typology_dict[scenario_statusquo].loc[
+                                                           buildings_to_SINGLE_RES, :]
+        diff_gfa['SINGLE_RES'] = 0.0
+        diff_gfa['MULTI_RES'] = diff_gfa['MULTI_RES'] - MULTI_to_SINGLE_RES_gfa
+        typology_endstate = typology_endstate.drop(buildings_to_SINGLE_RES)
+    return typology_updated, typology_endstate, diff_gfa
+
+
+def revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict, typology_updated, typology_endstate, year_endstate):
     if diff_gfa['SINGLE_RES'] < 0:
         avail_MULTI_RES_buildings = \
             typology_updated[typology_updated['REFERENCE_x'] == 'from SINGLE_RES'][typology_updated['1ST_USE_R'] >= 1][
-                typology_updated['YEAR'] < 2060].index # single-use MULTI_RES that is not modified in 2060
+                typology_updated['YEAR'] < year_endstate].index # single-use MULTI_RES that is not modified in year_endstate
         total_avail_gfa_to_SINGLE_RES = typology_dict[scenario_statusquo].loc[avail_MULTI_RES_buildings]['GFA_m2'].sum()
         if total_avail_gfa_to_SINGLE_RES > abs(diff_gfa['SINGLE_RES']):
             delta_gfa_dict = {}
@@ -156,8 +193,7 @@ def modify_typology_per_building_usetype(usetype, typology_updated, typology_end
     selected_floors_to_reduce_usetype = None
     # print(diff_gfa[usetype], min(footprint_usetype_endstate))
     if diff_gfa[usetype] > min(footprint_usetype_endstate):
-        selected_floors_to_reduce_usetype = select_buildings_from_candidates(usetype, diff_gfa,
-                                                                             floors_usetype_endstate,
+        selected_floors_to_reduce_usetype = select_buildings_from_candidates(diff_gfa[usetype], floors_usetype_endstate,
                                                                              footprint_usetype_endstate)
     # update typology
     buildings_modified = []
@@ -221,9 +257,9 @@ def write_selected_buildings_in_typology(building_usetype, selected_floors_to_re
     return typology_updated
 
 
-def select_buildings_from_candidates(usetype, diff_gfa, floors_usetype, footprint_usetype):
+def select_buildings_from_candidates(diff_gfa_usetype, floors_usetype, footprint_usetype):
     if len(floors_usetype) > 0:
-        x_floors = optimization_problem(usetype, floors_usetype, footprint_usetype, diff_gfa)
+        x_floors = optimization_problem(diff_gfa_usetype, floors_usetype, footprint_usetype)
         selected_floors_to_reduce_usetype = pd.Series(dtype=np.float)
         for key in x_floors.keys():
             if x_floors[key].varValue > 0:
@@ -248,13 +284,14 @@ def get_building_candidates(building_usetype, typology_endstate):
     return floors_of_usetype, footprint_of_usetype
 
 
-def optimization_problem(building_usetype, floors_of_usetype, footprint_of_usetype, diff_gfa):
+def optimization_problem(diff_gfa_usetype, floors_of_usetype, footprint_of_usetype):
+    assert diff_gfa_usetype > 0
     # Initialize Class
     opt_problem = pulp.LpProblem("Maximize", pulp.LpMaximize)
 
     # Define Decision Variables
     target_variables = floors_of_usetype.index  # buildings
-    target = diff_gfa[building_usetype]
+    target = diff_gfa_usetype
     target_variable_min = 0
     target_variable_max = max(floors_of_usetype)
 
@@ -300,6 +337,11 @@ def get_district_typology_merged(path_to_input):
         typology_merged[use_order + '_F'] = (
             round(typology_merged['floors_all'] * typology_merged[use_order + '_R'])).astype(
             int)
+    # initialize columns
+    typology_merged["additional_floors"] = 0
+    typology_merged["floors_ag_updated"] = typology_merged.floors_ag.astype(int)
+    typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
+    typology_merged.fillna('-', inplace=True)
     return typology_merged
 
 
@@ -333,12 +375,12 @@ if __name__ == "__main__":
     path_to_case_study_inputs = os.path.join(config.scenario, "case_study_inputs.xlsx")
     worksheet = f"{config.remap_ville_scenarios.district_archetype}_{config.remap_ville_scenarios.urban_development_scenario}"
     case_study_inputs_df = pd.read_excel(path_to_case_study_inputs, sheet_name=worksheet).set_index('year')
-    s_name = '2060_BAU'
+    s_name = '2060_DGT'
     config.scenario_name = s_name
     scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
 
     config.remap_ville_scenarios.year = 2040
-    config.remap_ville_scenarios.urban_development_scenario = 'BAU'
+    config.remap_ville_scenarios.urban_development_scenario = 'DGT'
     s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}_test'
     config.scenario_name = s_name
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
