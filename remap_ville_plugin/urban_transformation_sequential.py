@@ -46,12 +46,13 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     # 2. get diff_gfa
     diff_gfa = gfa_per_use_years_df.loc[scenario_endstate] - gfa_per_use_years_df.loc[scenario_intermediate]
     # remove 'MULTI_RES_PLANNED' from target
-    diff_gfa['MULTI_RES'] = diff_gfa['MULTI_RES'] - diff_gfa[case_study_inputs['MULTI_RES_PLANNED']]
-    diff_gfa = diff_gfa.drop(labels=case_study_inputs['MULTI_RES_PLANNED'])
+    if case_study_inputs['MULTI_RES_PLANNED'] in diff_gfa.index:
+        diff_gfa['MULTI_RES'] = diff_gfa['MULTI_RES'] - diff_gfa[case_study_inputs['MULTI_RES_PLANNED']]
+        diff_gfa = diff_gfa.drop(labels=case_study_inputs['MULTI_RES_PLANNED'])
     for use in diff_gfa.index:
         if np.isclose(gfa_per_use_years_df.loc[scenario_endstate,use], gfa_per_use_years_df.loc[scenario_statusquo,use]):
             diff_gfa[use] = 0.0
-            print(f'diff_gfa for {use} is set to 0.0')
+            print(f'\ndiff_gfa for {use} is set to 0.0')
 
     # 3. modify buildings
     typology_endstate = typology_dict[scenario_endstate]
@@ -88,10 +89,8 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     typology_save['REFERENCE'] = typology_save['REFERENCE_x']
     typology_save.loc[buildings_modified, 'REFERENCE'] = 'sequential-transformation'
     # TODO: add back the buildings untouched
-    typology_save_reindex = typology_save.reset_index()
-    typology_save_reindex = order_uses_in_typology(typology_save_reindex)
-    save_updated_typology(Path(new_locator.get_building_typology()), typology_save_reindex)
-    print(new_locator.get_building_typology())
+    typology_save = order_uses_in_typology(typology_save)
+    save_updated_typology(Path(new_locator.get_building_typology()), typology_save)
     # zone
     zone_endstate = gpd.read_file(scenario_locator_sequences[scenario_endstate].get_zone_geometry()).set_index('Name')
     zone_updated = zone_endstate.copy()
@@ -109,7 +108,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
         raise ValueError('nan values in zone_updated')
     zone_updated.to_file(new_locator.get_zone_geometry())
     # TODO: add back the buildings untouched
-    print(f'zone.shp updates...{new_locator.get_zone_geometry()}')
+    print(f'zone.shp updated...{new_locator.get_zone_geometry()}')
 
     # create technology folder
     district_archetype = config.remap_ville_scenarios.district_archetype
@@ -124,7 +123,7 @@ def revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict, 
     if diff_gfa['SINGLE_RES'] < 0:
         avail_MULTI_RES_buildings = \
             typology_updated[typology_updated['REFERENCE_x'] == 'from SINGLE_RES'][typology_updated['1ST_USE_R'] >= 1][
-                typology_updated['YEAR'] == 2060].index
+                typology_updated['YEAR'] < 2060].index # single-use MULTI_RES that is not modified in 2060
         total_avail_gfa_to_SINGLE_RES = typology_dict[scenario_statusquo].loc[avail_MULTI_RES_buildings]['GFA_m2'].sum()
         if total_avail_gfa_to_SINGLE_RES > abs(diff_gfa['SINGLE_RES']):
             delta_gfa_dict = {}
@@ -140,7 +139,7 @@ def revert_MULTI_RES_to_SINGLE_RES(diff_gfa, scenario_statusquo, typology_dict, 
             buildings_to_SINGLE_RES = delta_gfa_dict[min(delta_gfa_dict.keys())]
         else:
             buildings_to_SINGLE_RES = avail_MULTI_RES_buildings
-        print('Reverting...', len(buildings_to_SINGLE_RES), ' to SINGLE_RES')
+        print('Reverting...', len(buildings_to_SINGLE_RES), 'MULTI_RES to SINGLE_RES')
         MULTI_to_SINGLE_RES_gfa = typology_updated.loc[buildings_to_SINGLE_RES]['GFA_m2'].sum()
         # write typology
         typology_updated.loc[buildings_to_SINGLE_RES, :] = typology_dict[scenario_statusquo].loc[
@@ -325,10 +324,10 @@ def get_gfa_per_usetype(typology_merged, key):
 
 if __name__ == "__main__":
     config = cea.config.Configuration()
-    config.project = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\echallens_new'
+    config.project = r'C:\Users\shsieh\Desktop\TEST_A'
 
     scenario_locator_sequences = {}
-    s_name = '2020_planned'
+    s_name = '2020'
     config.scenario_name = s_name
     scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     path_to_case_study_inputs = os.path.join(config.scenario, "case_study_inputs.xlsx")
