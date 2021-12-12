@@ -57,9 +57,6 @@ def main(config):
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     initialize_input_folder(config, new_locator)
     copy_inputs_folder_content(old_locator, new_locator)
-    # copy air conditioning and supply system
-    copy_file(old_locator.get_building_air_conditioning(), new_locator.get_building_air_conditioning())
-    copy_file(old_locator.get_building_supply(), new_locator.get_building_supply())
     scenario_year = int(config.remap_ville_scenarios.year)
     case_study_inputs = case_study_inputs_df.loc[scenario_year]
     sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences, case_study_inputs, scenario_year)
@@ -114,6 +111,7 @@ def initialize_new_scenario(config):
 
 
 def copy_inputs_folder_content(old_locator, new_locator):
+    print(f'copying from...{old_locator.get_input_folder()}')
     # copy files from old_locator to new_locator
     copy_folder(old_locator.get_building_geometry_folder(), new_locator.get_building_geometry_folder())
     copy_folder(old_locator.get_terrain_folder(), new_locator.get_terrain_folder())
