@@ -42,6 +42,7 @@ def main(config, typology_statusquo, case_inputs):
     # get additional required gfa per use
     gfa_per_use_additional = gfa_per_use_future_target - gfa_per_use_statusquo
     gfa_per_use_additional["MULTI_RES"] = gfa_per_use_additional["MULTI_RES"] - gfa_res_planned
+    print(f'Diminishing uses: {gfa_per_use_additional[gfa_per_use_additional < 0].index.values}')
     gfa_per_use_additional[gfa_per_use_additional < 0] = 0.0  # FIXME: TRANSFORM THE USETYPE THAT IS DIMINISHING
     # transform part of SECONDARY_RES to MULTI_RES
     gfa_per_use_additional, \
@@ -58,7 +59,8 @@ def main(config, typology_statusquo, case_inputs):
     gfa_total_additional_target = gfa_per_use_additional.sum()
     overview["gfa_per_use_future_target"] = gfa_per_use_future_target.astype(int)
     overview["gfa_per_use_additional_target"] = gfa_per_use_additional.astype(int)
-    return gfa_per_use_future_target, gfa_per_use_additional_target, gfa_total_additional_target, overview, rel_ratio_to_res_gfa_target, typology_planned, typology_statusquo
+    return gfa_per_use_future_target, gfa_per_use_additional_target, gfa_total_additional_target, overview, \
+           rel_ratio_to_res_gfa_target, typology_planned, typology_statusquo
 
 
 def remove_buildings_by_uses(typology_df: pd.DataFrame, uses_to_remove: list):
@@ -151,6 +153,7 @@ def calc_gfa_per_use_future_target(future_required_additional_res_gfa,
 
 def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo, case_inputs):
     buildings_SINGLE_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SINGLE_RES'].index)
+    print(f'{len(buildings_SINGLE_RES)} SINGLE_RES in the district.')
     num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * case_inputs['SINGLE_to_MULTI_RES_ratio'])
     if num_buildings_to_MULTI_RES > 0.0:
         print('Converting...', num_buildings_to_MULTI_RES, 'SINGLE_RES to MULTI_RES')
@@ -185,7 +188,7 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
     """
     SECONDARY_RES_buildings = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SECONDARY_RES'].index)
     SECONDARY_RES_gfa = typology_statusquo.loc[SECONDARY_RES_buildings]['GFA_m2'].sum()
-    print(len(SECONDARY_RES_buildings), 'SECONDARY_RES buildings in the district.')
+    print('\n', len(SECONDARY_RES_buildings), 'SECONDARY_RES buildings in the district.')
     required_SECONDARY_RES_gfa = 0.0
     if 'SECONDARY_RES' in gfa_per_use_additional_required.index:
         required_SECONDARY_RES_gfa = gfa_per_use_additional_required['SECONDARY_RES']
