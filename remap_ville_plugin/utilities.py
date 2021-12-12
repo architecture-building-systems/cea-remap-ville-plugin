@@ -6,7 +6,8 @@ from collections import defaultdict
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
 
 def save_updated_typology(path_to_output_typology_file, simulated_typology):
-    output = simulated_typology.copy()
+    simulated_typology_reindex = simulated_typology.reset_index()
+    output = simulated_typology_reindex.copy()
     keep = list()
     columns_to_keep = [("Name", str), ("YEAR", int), ("STANDARD", str), ("1ST_USE", str), ("1ST_USE_R", float),
                        ("2ND_USE", str), ("2ND_USE_R", float), ("3RD_USE", str), ("3RD_USE_R", float),
