@@ -35,11 +35,14 @@ def main(config):
     initial_scenario_name = config.scenario_name
     scenario_locator_sequences[initial_scenario_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     ## 1. Initialize new scenario
+    # decide year order, the year with larger population is the endstate
+    [year_endstate, year_intermidiate] = case_study_inputs_df['additional_population'].sort_values(ascending=False).index
+    config.remap_ville_scenarios.year = year_endstate
     config, new_locator, old_locator, urban_development_scenario, year = initialize_new_scenario(config)
     endstate_scenario_name = config.scenario_name
     scenario_locator_sequences[endstate_scenario_name] = new_locator
 
-    ## 2. Urban Transformation (end-state: 2060)
+    ## 2. Urban Transformation (end-state)
     print(f"Transforming scenario according to urban development scenario... {urban_development_scenario}")
     urban_transformation.main(config, case_study_inputs_df)
 
@@ -49,17 +52,16 @@ def main(config):
     update_indoor_comfort('SQ', new_locator)
 
     ## 3. Urban Transformation (2040)
-    config.scenario_name = '2060_'+urban_development_scenario
+    config.scenario_name = str(year_endstate)+'_'+urban_development_scenario
     old_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    new_scenario_name = '2040_'+urban_development_scenario
+    new_scenario_name = str(year_intermidiate)+'_'+urban_development_scenario
     config.scenario_name = new_scenario_name
-    config.remap_ville_scenarios.year = 2040
+    config.remap_ville_scenarios.year = year_intermidiate
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
     initialize_input_folder(config, new_locator)
     copy_inputs_folder_content(old_locator, new_locator)
-    scenario_year = int(config.remap_ville_scenarios.year)
-    case_study_inputs = case_study_inputs_df.loc[scenario_year]
-    sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences, case_study_inputs, scenario_year)
+    case_study_inputs = case_study_inputs_df.loc[int(year_intermidiate)]
+    sequential_urban_transformation.main(config, new_locator, scenario_locator_sequences, case_study_inputs, int(year_intermidiate), year_endstate)
 
     # TODO: update use_types in the technology folder!!!
 
