@@ -54,6 +54,11 @@ def main(config, typology_statusquo, case_inputs):
     gfa_per_use_future_target, \
     typology_statusquo = convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional, gfa_per_use_future_target,
                                                      typology_statusquo, case_inputs)
+    # transform parts of OFFICE to MULTI_RES
+    gfa_per_use_additional, \
+    gfa_per_use_future_target, \
+    typology_statusquo = convert_OFFICE_TO_MULTI_RES(gfa_per_use_additional, gfa_per_use_future_target,
+                                                     typology_statusquo, case_inputs)
     # get gfa_per_use_additional_target
     gfa_per_use_additional_target = gfa_per_use_additional.astype(int).to_dict()
     gfa_total_additional_target = gfa_per_use_additional.sum()
@@ -149,6 +154,31 @@ def calc_gfa_per_use_future_target(future_required_additional_res_gfa,
             gfa_per_use_future_target_dict.update({use_type: gfa_future_required})
     gfa_per_use_future_target = pd.Series(gfa_per_use_future_target_dict)
     return gfa_per_use_future_target
+
+
+def convert_OFFICE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo, case_inputs):
+    typology_usetype = typology_statusquo[typology_statusquo['1ST_USE'] == 'OFFICE'][typology_statusquo['1ST_USE_R'] >= 1.0]
+    buildings_usetype = list(typology_usetype.index)
+    print(f'{len(buildings_usetype)} OFFICE in the district.')
+    num_buildings_to_MULTI_RES = int(len(buildings_usetype) * case_inputs['OFFICE_to_MULTI_RES_ratio'])
+    if num_buildings_to_MULTI_RES > 0.0:
+        buildings_to_MULTI_RES = random.sample(buildings_usetype, num_buildings_to_MULTI_RES)
+        gfa_to_MULTI_RES = 0.0
+        b_count = 0
+        for b in buildings_to_MULTI_RES:
+            building_gfa = typology_statusquo.loc[b]['GFA_m2']
+            gfa_to_MULTI_RES += building_gfa
+            typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"OFFICE": "MULTI_RES"})
+            typology_statusquo.loc[b, 'REFERENCE_x'] = 'from OFFICE'
+            b_count += 1
+            if gfa_to_MULTI_RES > gfa_per_use_additional_required["MULTI_RES"]:
+                break
+        print('Converting...', b_count, 'OFFICE to MULTI_RES')
+        gfa_per_use_future_target["OFFICE"] = gfa_per_use_future_target["OFFICE"] - gfa_to_MULTI_RES
+        gfa_per_use_additional_required["OFFICE"] = 0.0 # no additional OFFICE
+        gfa_per_use_additional_required["MULTI_RES"] = max(gfa_per_use_additional_required["MULTI_RES"] - gfa_to_MULTI_RES, 0.0)
+        assert gfa_per_use_additional_required["MULTI_RES"] >= 0.0
+    return gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo
 
 
 def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo, case_inputs):
