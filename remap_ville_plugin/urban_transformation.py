@@ -18,6 +18,7 @@ from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns,
 import remap_ville_plugin.area_optimization_mapper as amap
 from remap_ville_plugin.remap_setup_scenario import update_config
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
+from remap_ville_plugin.urban_transformation_sequential import get_building_candidates, select_buildings_from_candidates, get_district_typology_merged
 
 __author__ = "Anastasiya Popova, Shanshan Hsieh"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -47,7 +48,7 @@ def main(config, case_study_inputs_df):
     case_study_inputs = case_study_inputs_df.loc[float(year)]
     ## 1. Gather input data
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    typology_merged = get_sample_data(new_locator)
+    typology_merged = get_district_typology_merged(new_locator.get_input_folder())
     existing_uses = read_existing_uses(typology_merged)
     # exclude planned buildings
     typology_statusquo = typology_merged.copy()
@@ -91,7 +92,6 @@ def main(config, case_study_inputs_df):
 
     ## 6. Check results and save overview_df
     save_updated_typology_to_overview(new_locator, new_scenario_name, overview)
-
     return
 
 
@@ -119,10 +119,9 @@ def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_buildin
     floors_ag_updated, height_ag_updated = defaultdict(int), defaultdict(int)
     for b, sb in building_to_sub_building.items():
         floors_ag_updated[b] = sum([result_add_floors[_sb] for _sb in sb])
-        height_ag_updated[b] = floors_ag_updated[b] * 3
         best_typology_df.loc[b, "additional_floors"] = floors_ag_updated[b]
         best_typology_df.loc[b, "floors_ag_updated"] = best_typology_df.floors_ag[b] + floors_ag_updated[b]
-        best_typology_df.loc[b, "height_ag_updated"] = best_typology_df.height_ag[b] + height_ag_updated[b]
+        best_typology_df.loc[b, "height_ag_updated"] = best_typology_df.loc[b, "floors_ag_updated"] * 3
     # save zone_shp_updated
     zone_shp_updated = gpd.read_file(str(path_to_input_zone_shape_file))
     zone_shp_updated = zone_shp_updated.set_index("Name")
@@ -136,10 +135,9 @@ def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_buildin
 
 def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo, new_locator,
                        year):
-    # update zone.shp
     path_to_output_zone_shp = Path(new_locator.get_zone_geometry())
     path_to_output_typology_dbf = Path(new_locator.get_building_typology())
-
+    # update zone.shp
     floors_ag_updated, zone_shp_updated = update_zone_shp(best_typology_df,
                                                           result_add_floors,
                                                           building_to_sub_building,
