@@ -3,6 +3,8 @@ import numpy as np
 import shutil
 import operator
 from collections import defaultdict
+
+import pulp
 from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
 
 def save_updated_typology(path_to_output_typology_file, simulated_typology):
@@ -90,3 +92,65 @@ def order_uses_in_typology(typology_df):
             ordered_typology_df.loc[building, use_order + '_R'] = ordered_ratios[i]
     return ordered_typology_df
 
+
+def select_buildings_from_candidates(diff_gfa_usetype, floors_usetype, footprint_usetype):
+    if len(floors_usetype) > 0 and diff_gfa_usetype > min(footprint_usetype):
+        x_floors = optimization_problem(diff_gfa_usetype, floors_usetype, footprint_usetype)
+        selected_floors_to_reduce_usetype = pd.Series(dtype=np.float)
+        for key in x_floors.keys():
+            if x_floors[key].varValue > 0:
+                selected_floors_to_reduce_usetype[key] = x_floors[key].varValue
+        print(len(selected_floors_to_reduce_usetype), 'buildings selected.')
+    else:
+        selected_floors_to_reduce_usetype = None
+    return selected_floors_to_reduce_usetype
+
+
+def get_building_candidates(building_usetype, typology_endstate):
+    floors_of_usetype, footprint_of_usetype = pd.Series(dtype=np.int), pd.Series(dtype=np.float)
+    for use_order in ['1ST_USE', '2ND_USE', '3RD_USE']:
+        buildings = list(typology_endstate.loc[typology_endstate[use_order] == building_usetype].index)
+        floors_of_use_order = typology_endstate[use_order + '_F'].loc[buildings]
+        floors_of_usetype = floors_of_usetype.append(floors_of_use_order)
+        footprint_of_usetype = footprint_of_usetype.append(typology_endstate['footprint'].loc[buildings])
+    # print('GFA status-quo:', round((footprint_of_usetype * floors_of_usetype).sum(), 1))
+    floors_of_usetype = floors_of_usetype[~np.isclose(floors_of_usetype, 0.0)]
+    footprint_of_usetype = footprint_of_usetype[floors_of_usetype.index]
+    print(len(footprint_of_usetype), building_usetype, 'buildings are in district.')
+    return floors_of_usetype, footprint_of_usetype
+
+
+def optimization_problem(diff_gfa_usetype, floors_of_usetype, footprint_of_usetype):
+    assert diff_gfa_usetype > 0
+    # Initialize Class
+    opt_problem = pulp.LpProblem("Maximize", pulp.LpMaximize)
+
+    # Define Decision Variables
+    target_variables = floors_of_usetype.index  # buildings
+    target = diff_gfa_usetype
+    target_variable_min = 0
+    target_variable_max = max(floors_of_usetype)
+
+    x_floors = pulp.LpVariable.dict(
+        '',
+        target_variables,
+        target_variable_min,
+        target_variable_max,
+        pulp.LpInteger
+    )
+
+    # Define Objective Function
+    sub_building_footprint_area = footprint_of_usetype
+    objective = [x_floors[i] * sub_building_footprint_area[i] for i in target_variables]
+    opt_problem += pulp.lpSum(objective)  # objective
+
+    # Define Constraints
+    opt_problem += pulp.lpSum([x_floors[i] * sub_building_footprint_area[i]
+                               for i in target_variables]) <= target
+    for i in target_variables:
+        opt_problem += x_floors[i] <= floors_of_usetype[i]
+
+    # Solve Model
+    # print(opt_problem)
+    opt_problem.solve(pulp.GLPK(options=['--mipgap', '0.01'], msg=False))
+    return x_floors

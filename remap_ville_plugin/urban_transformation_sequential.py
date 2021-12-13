@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import os
 import geopandas as gpd
-import pulp
 from collections import defaultdict
 from pathlib import Path
 import random
@@ -13,6 +12,7 @@ from cea.utilities.dbf import dbf_to_dataframe
 from remap_ville_plugin.utilities import save_updated_typology, filter_buildings_by_year, order_uses_in_typology
 from remap_ville_plugin.create_technology_database import create_input_technology_folder, update_indoor_comfort
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
+from utilities import select_buildings_from_candidates, get_building_candidates
 
 path_to_folder = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\Echallens'
 use_cols = ['MULTI_RES', 'SINGLE_RES', 'SECONDARY_RES', 'HOTEL', 'OFFICE', 'RETAIL', 'FOODSTORE',
@@ -255,69 +255,6 @@ def write_selected_buildings_in_typology(building_usetype, selected_floors_to_re
     if typology_updated.isnull().sum().sum() > 0:
         raise ValueError('nan value in typology_updated')
     return typology_updated
-
-
-def select_buildings_from_candidates(diff_gfa_usetype, floors_usetype, footprint_usetype):
-    if len(floors_usetype) > 0:
-        x_floors = optimization_problem(diff_gfa_usetype, floors_usetype, footprint_usetype)
-        selected_floors_to_reduce_usetype = pd.Series(dtype=np.float)
-        for key in x_floors.keys():
-            if x_floors[key].varValue > 0:
-                selected_floors_to_reduce_usetype[key] = x_floors[key].varValue
-        print(len(selected_floors_to_reduce_usetype), 'buildings selected:', selected_floors_to_reduce_usetype.index)
-    else:
-        selected_floors_to_reduce_usetype = None
-    return selected_floors_to_reduce_usetype
-
-
-def get_building_candidates(building_usetype, typology_endstate):
-    floors_of_usetype, footprint_of_usetype = pd.Series(dtype=np.int), pd.Series(dtype=np.float)
-    for use_order in ['1ST_USE', '2ND_USE', '3RD_USE']:
-        buildings = list(typology_endstate.loc[typology_endstate[use_order] == building_usetype].index)
-        floors_of_use_order = typology_endstate[use_order + '_F'].loc[buildings]
-        floors_of_usetype = floors_of_usetype.append(floors_of_use_order)
-        footprint_of_usetype = footprint_of_usetype.append(typology_endstate['footprint'].loc[buildings])
-    # print('GFA status-quo:', round((footprint_of_usetype * floors_of_usetype).sum(), 1))
-    floors_of_usetype = floors_of_usetype[~np.isclose(floors_of_usetype, 0.0)]
-    footprint_of_usetype = footprint_of_usetype[floors_of_usetype.index]
-    print(len(footprint_of_usetype), building_usetype, 'buildings are in district.')
-    return floors_of_usetype, footprint_of_usetype
-
-
-def optimization_problem(diff_gfa_usetype, floors_of_usetype, footprint_of_usetype):
-    assert diff_gfa_usetype > 0
-    # Initialize Class
-    opt_problem = pulp.LpProblem("Maximize", pulp.LpMaximize)
-
-    # Define Decision Variables
-    target_variables = floors_of_usetype.index  # buildings
-    target = diff_gfa_usetype
-    target_variable_min = 0
-    target_variable_max = max(floors_of_usetype)
-
-    x_floors = pulp.LpVariable.dict(
-        '',
-        target_variables,
-        target_variable_min,
-        target_variable_max,
-        pulp.LpInteger
-    )
-
-    # Define Objective Function
-    sub_building_footprint_area = footprint_of_usetype
-    objective = [x_floors[i] * sub_building_footprint_area[i] for i in target_variables]
-    opt_problem += pulp.lpSum(objective)  # objective
-
-    # Define Constraints
-    opt_problem += pulp.lpSum([x_floors[i] * sub_building_footprint_area[i]
-                               for i in target_variables]) <= target
-    for i in target_variables:
-        opt_problem += x_floors[i] <= floors_of_usetype[i]
-
-    # Solve Model
-    # print(opt_problem)
-    opt_problem.solve(pulp.GLPK(options=['--mipgap', '0.01'], msg=False))
-    return x_floors
 
 
 def get_district_typology_merged(path_to_input):
