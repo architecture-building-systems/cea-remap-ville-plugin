@@ -18,7 +18,8 @@ from remap_ville_plugin.utilities import calc_gfa_per_use, typology_use_columns,
 import remap_ville_plugin.area_optimization_mapper as amap
 from remap_ville_plugin.remap_setup_scenario import update_config
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
-from remap_ville_plugin.urban_transformation_sequential import get_building_candidates, select_buildings_from_candidates, get_district_typology_merged
+from remap_ville_plugin.urban_transformation_sequential import get_district_typology_merged
+
 
 __author__ = "Anastasiya Popova, Shanshan Hsieh"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -29,7 +30,7 @@ __maintainer__ = "Shanshan Hsieh"
 __email__ = "cea@arch.ethz.ch"
 __status__ = "Production"
 
-from urban_transformation_preprocessing import remove_buildings_by_uses
+
 
 PARAMS = {
     'scenario_count': 10,
@@ -58,7 +59,7 @@ def main(config, case_study_inputs_df):
 
     ## 3. Finalize Inputs
     # filter out buildings by use
-    typology_kept_uses, typology_untouched_uses = remove_buildings_by_uses(typology_statusquo,
+    typology_kept_uses, typology_untouched_uses = preprocessing.remove_buildings_by_uses(typology_statusquo,
                                                                            uses_to_remove=case_study_inputs[
                                                                                'USES_UNTOUCH'])
     # filter out buildings by year
@@ -66,28 +67,36 @@ def main(config, case_study_inputs_df):
         "preserve_buildings_built_before"])
     # final typology_input to be optimized
     typology_input = typology_after_year.copy()
-    # set constraints
-    range_additional_floors_per_building = calc_range_additional_floors_per_building(typology_input, case_study_inputs, config)
-    possible_uses_per_cityzone = update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target)
-    # create random scenarios
-    scenarios = amap.randomize_scenarios(typology_merged=typology_input, usetype_constraints=possible_uses_per_cityzone,
-                                         use_columns=typology_use_columns(), scenario_count=PARAMS['scenario_count'])
-    ## 4. Optimize Urban Transformation
-    metrics, op_solutions = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
-                                                   gfa_per_use_additional_target, gfa_total_additional_target,
-                                                   case_study_inputs)
-    ## 5. Reconstruct District with the Best Scenario
-    best_scenario, scenario_errors = amap.find_optimum_scenario(op_solutions=op_solutions,
-                                                                target=gfa_total_additional_target)
-    overview['result_add_gfa_per_use'] = metrics[best_scenario]['gfa_per_use'].loc['result']
-    best_typology_df = scenarios[best_scenario].copy()
+    if gfa_total_additional_target > 0:
+        print('\nRunning area mapper optimization...')
+        # set constraints
+        range_additional_floors_per_building = calc_range_additional_floors_per_building(typology_input,
+                                                                                         case_study_inputs, config)
+        possible_uses_per_cityzone = update_possible_uses_per_cityzone(rel_ratio_to_res_gfa_target)
+        # create random scenarios
+        scenarios = amap.randomize_scenarios(typology_merged=typology_input, usetype_constraints=possible_uses_per_cityzone,
+                                             use_columns=typology_use_columns(), scenario_count=PARAMS['scenario_count'])
+        ## 4. Optimize Urban Transformation
+        metrics, op_solutions = optimize_all_scenarios(range_additional_floors_per_building, scenarios,
+                                                       gfa_per_use_additional_target, gfa_total_additional_target,
+                                                       case_study_inputs)
+        ## 5. Reconstruct District with the Best Scenario
+        best_scenario, scenario_errors = amap.find_optimum_scenario(op_solutions=op_solutions,
+                                                                    target=gfa_total_additional_target)
+        overview['result_add_gfa_per_use'] = metrics[best_scenario]['gfa_per_use'].loc['result']
+        # get floors added per building
+        result_add_floors = amap.parse_milp_solution(op_solutions[best_scenario]["solution"])
+        building_to_sub_building_best_scenario = op_solutions[best_scenario]['building_to_sub_building']
+        best_typology_df = scenarios[best_scenario].copy()
+    else:
+        result_add_floors, building_to_sub_building_best_scenario = None, None
+        best_typology_df = typology_input
     # add back those buildings that got filtered out
     best_typology_df = best_typology_df.append(typology_preserved_year, sort=True)
     best_typology_df = best_typology_df.append(typology_planned, sort=True)
     best_typology_df = best_typology_df.append(typology_untouched_uses, sort=True)
-    # get floors added per building
-    result_add_floors = amap.parse_milp_solution(op_solutions[best_scenario]["solution"])
-    save_best_scenario(best_typology_df, result_add_floors, op_solutions[best_scenario]['building_to_sub_building'],
+
+    save_best_scenario(best_typology_df, result_add_floors, building_to_sub_building_best_scenario,
                        typology_statusquo, new_locator, year)
 
     ## 6. Check results and save overview_df
@@ -108,29 +117,36 @@ def save_updated_typology_to_overview(new_locator, new_scenario_name, overview):
     overview_df = pd.DataFrame(overview)
     overview_df = pd.concat([overview_df, use_count_df], axis=1)
     overview_df.fillna(0.0, inplace=True)
-    # TODO: fill na with 0
     overview_df.to_csv(os.path.join(new_locator.get_input_folder(), new_scenario_name + "_overview.csv"))
     return
 
 
 def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_building, path_to_input_zone_shape_file,
                     path_to_output_zone_shape_file):
-    # update floors_ag and height_ag
-    floors_ag_updated, height_ag_updated = defaultdict(int), defaultdict(int)
-    for b, sb in building_to_sub_building.items():
-        floors_ag_updated[b] = sum([result_add_floors[_sb] for _sb in sb])
-        best_typology_df.loc[b, "additional_floors"] = floors_ag_updated[b]
-        best_typology_df.loc[b, "floors_ag_updated"] = best_typology_df.floors_ag[b] + floors_ag_updated[b]
-        best_typology_df.loc[b, "height_ag_updated"] = best_typology_df.loc[b, "floors_ag_updated"] * 3
+    if result_add_floors is not None:
+        print('\nupdating floors_ag in zone_shp_updated')
+        # update floors_ag and height_ag
+        floors_ag_additional = defaultdict(int)
+        for b, sb in building_to_sub_building.items():
+            floors_ag_additional[b] = sum([result_add_floors[_sb] for _sb in sb])
+            best_typology_df.loc[b, "additional_floors"] = floors_ag_additional[b]
+            best_typology_df.loc[b, "floors_ag_updated"] = best_typology_df.floors_ag[b] + floors_ag_additional[b]
+            best_typology_df.loc[b, "height_ag_updated"] = best_typology_df.loc[b, "floors_ag_updated"] * 3
+            best_typology_df.loc[b, "REFERENCE"] = "after-optimization"
+    else:
+        best_typology_df["floors_ag_updated"] = best_typology_df.floors_ag
+        best_typology_df["height_ag_updated"] = best_typology_df.floors_ag * 3
+        floors_ag_additional = None
+
     # save zone_shp_updated
     zone_shp_updated = gpd.read_file(str(path_to_input_zone_shape_file))
+    zone_shp_updated.fillna('-', inplace=True)
     zone_shp_updated = zone_shp_updated.set_index("Name")
     zone_shp_updated["floors_ag"] = best_typology_df["floors_ag_updated"]
     zone_shp_updated["height_ag"] = best_typology_df["height_ag_updated"]
-    zone_shp_updated["REFERENCE"] = "after-optimization"
     zone_shp_updated.to_file(path_to_output_zone_shape_file)
     print(f'zone.shp updated: {path_to_output_zone_shape_file}')
-    return floors_ag_updated, zone_shp_updated
+    return floors_ag_additional, zone_shp_updated
 
 
 def save_best_scenario(best_typology_df, result_add_floors, building_to_sub_building, typology_statusquo, new_locator,
@@ -162,40 +178,42 @@ def update_typology_dbf(best_typology_df, result_add_floors, building_to_sub_bui
     simulated_typology["3RD_USE_R"] = simulated_typology["3RD_USE_R"].astype(float)
     simulated_typology["REFERENCE"] = status_quo_typology["REFERENCE_x"]
     use_col_dict = {i: column for i, column in enumerate(["1ST_USE", "2ND_USE", "3RD_USE"])}
-    for b, sb in building_to_sub_building.items():
-        updated_floor_per_use_col = dict()
-        current_floors = status_quo_typology.loc[b, "floors_ag"] + status_quo_typology.loc[b, "floors_bg"]
-        total_additional_floors = sum([result_add_floors[y] for y in sb])
-        assert np.isclose(total_additional_floors, floors_ag_updated[b])
-        updated_floors = current_floors + total_additional_floors
-        total_gfa = updated_floors * status_quo_typology.footprint[b]
-        assert np.isclose(zone_updated_gfa_per_building.loc[b], total_gfa)
-        # get updated_floor_per_use_col
-        for i, sub_building in enumerate(sb):
-            sub_building_additional_floors = result_add_floors[sub_building]
-            current_ratio = status_quo_typology.loc[b, use_col_dict[i] + '_R']
-            updated_floor_per_use_col[use_col_dict[i]] = (
-                    sub_building_additional_floors + (current_ratio * current_floors))
-        if not np.isclose(updated_floors, sum(updated_floor_per_use_col.values())):
-            raise ValueError("total number of floors mis-match excpeted number of floors")
-        # write updated usetype ratio
-        for use_col in updated_floor_per_use_col:
-            use_statusquo = typology_statusquo.loc[b, use_col]
-            r_statusquo = typology_statusquo.loc[b, use_col + '_R']
-            use_updated = simulated_typology.loc[b, use_col]
-            r_updated = updated_floor_per_use_col[use_col] / updated_floors
-            if np.isclose(r_updated, 0.0):
-                use_updated = "NONE"
-                simulated_typology.loc[b, use_col] = use_updated
-            if r_updated > 0 and (use_statusquo, r_statusquo, current_floors) != (
-            use_updated, r_updated, updated_floors):
-                # building that changes usetype or ratios
-                simulated_typology.loc[b, use_col + '_R'] = r_updated
-                simulated_typology.loc[b, 'YEAR'] = year
-                # if simulated_typology.loc[b, use_col] == 'MULTI_RES':
-                #     # update MULTI_RES use-type properties
-                #     if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
-                #         simulated_typology.loc[b, use_col] = 'MULTI_RES_2040'  # FIXME: hard-coded, MAYBE REDUNDANT
+    if not floors_ag_updated is None:
+        print('\nupdating usetype ratio and year in typology.dbf')
+        for b, sb in building_to_sub_building.items():
+            updated_floor_per_use_col = dict()
+            current_floors = status_quo_typology.loc[b, "floors_ag"] + status_quo_typology.loc[b, "floors_bg"]
+            total_additional_floors = sum([result_add_floors[y] for y in sb])
+            assert np.isclose(total_additional_floors, floors_ag_updated[b])
+            updated_floors = current_floors + total_additional_floors
+            total_gfa = updated_floors * status_quo_typology.footprint[b]
+            assert np.isclose(zone_updated_gfa_per_building.loc[b], total_gfa)
+            # get updated_floor_per_use_col
+            for i, sub_building in enumerate(sb):
+                sub_building_additional_floors = result_add_floors[sub_building]
+                current_ratio = status_quo_typology.loc[b, use_col_dict[i] + '_R']
+                updated_floor_per_use_col[use_col_dict[i]] = (
+                        sub_building_additional_floors + (current_ratio * current_floors))
+            if not np.isclose(updated_floors, sum(updated_floor_per_use_col.values())):
+                raise ValueError("total number of floors mis-match excpeted number of floors")
+            # write updated usetype ratio
+            for use_col in updated_floor_per_use_col:
+                use_statusquo = typology_statusquo.loc[b, use_col]
+                r_statusquo = typology_statusquo.loc[b, use_col + '_R']
+                use_updated = simulated_typology.loc[b, use_col]
+                r_updated = updated_floor_per_use_col[use_col] / updated_floors
+                if np.isclose(r_updated, 0.0):
+                    use_updated = "NONE"
+                    simulated_typology.loc[b, use_col] = use_updated
+                if r_updated > 0 and (use_statusquo, r_statusquo, current_floors) != (
+                use_updated, r_updated, updated_floors):
+                    # building that changes usetype or ratios
+                    simulated_typology.loc[b, use_col + '_R'] = r_updated
+                    simulated_typology.loc[b, 'YEAR'] = year
+                    # if simulated_typology.loc[b, use_col] == 'MULTI_RES':
+                    #     # update MULTI_RES use-type properties
+                    #     if updated_floor_per_use_col[use_col] > 0 or status_quo_typology.loc[b, use_col] == 'SINGLE_RES':
+                    #         simulated_typology.loc[b, use_col] = 'MULTI_RES_2040'  # FIXME: hard-coded, MAYBE REDUNDANT
     simulated_typology = order_uses_in_typology(simulated_typology)
     save_updated_typology(path_to_output_typology_file, simulated_typology)
 
@@ -283,9 +301,11 @@ def get_possible_uses_per_cityzone():
 
 
 def calc_range_additional_floors_per_building(typology_status_quo, case_study_inputs, config):
-    district_archetype =  config.remap_ville_scenarios.district_archetype
+    district_archetype = config.remap_ville_scenarios.district_archetype
     if district_archetype == 'URB' and 'city_zone' in typology_status_quo.columns:
-        floor_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26), 3: (0, 13)}  # FIXME: hard-coded for Altstetten
+        floor_limit_per_city_zone = {0: (0, 8), 1: (0, 26), 2: (0, 26), 3: (0, 13)} # FIXME: hard-coded for Altstetten
+    elif district_archetype == 'RRL' and 'city_zone' in typology_status_quo.columns:
+        floor_limit_per_city_zone = {0: (0, 0), 1: (0, 13)} # FIXME: hard-coded for Airolo
     else:
         floor_limit_per_city_zone = {
             0: (0, case_study_inputs['building_height_limit'] // PARAMS['floor_height']),
@@ -307,23 +327,23 @@ def read_existing_uses(typology_merged):
     assert all([True if use in valid_use_types else False for use in existing_uses])  # check valid uses
     return existing_uses
 
-
-def get_sample_data(new_locator):
-    """
-    merges topology.dbf and architecture.dbf, calculate GFA, and initiates empty columns
-    :return:
-    """
-    prop_geometries_df = get_prop_geometry(new_locator)
-    typology_df = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name', drop=False)
-    # write typology_merged
-    typology_merged = typology_df.merge(prop_geometries_df, left_index=True, right_on='Name')
-    typology_merged.floors_ag = typology_merged.floors_ag.astype(int)
-    # initialize columns
-    typology_merged["additional_floors"] = 0
-    typology_merged["floors_ag_updated"] = typology_merged.floors_ag.astype(int)
-    typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
-    typology_merged.fillna('-', inplace=True)
-    return typology_merged
+# TODO: remove get_sample_data
+# def get_sample_data(new_locator):
+#     """
+#     merges topology.dbf and architecture.dbf, calculate GFA, and initiates empty columns
+#     :return:
+#     """
+#     prop_geometries_df = get_prop_geometry(new_locator)
+#     typology_df = dbf_to_dataframe(new_locator.get_building_typology()).set_index('Name', drop=False)
+#     # write typology_merged
+#     typology_merged = typology_df.merge(prop_geometries_df, left_index=True, right_on='Name')
+#     typology_merged.floors_ag = typology_merged.floors_ag.astype(int)
+#     # initialize columns
+#     typology_merged["additional_floors"] = 0
+#     typology_merged["floors_ag_updated"] = typology_merged.floors_ag.astype(int)
+#     typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
+#     typology_merged.fillna('-', inplace=True)
+#     return typology_merged
 
 
 def get_prop_geometry(locator):
@@ -334,7 +354,7 @@ def get_prop_geometry(locator):
     architecture_dbf = dbf_to_dataframe(locator.get_building_architecture()).set_index('Name')
     zone_gdf = gpd.read_file(locator.get_zone_geometry())
     if not 'city_zone' in zone_gdf.columns:
-        zone_gdf['city_zone'] = 1  # TODO: temp fix
+        zone_gdf['city_zone'] = 0  # TODO: temp fix
     prop_geometry = zone_gdf.copy()
     prop_geometry['footprint'] = zone_gdf.area
     prop_geometry['GFA_m2'] = prop_geometry['footprint'] * (prop_geometry['floors_ag'] + prop_geometry['floors_bg'])
