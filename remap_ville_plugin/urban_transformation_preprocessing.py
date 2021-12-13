@@ -7,6 +7,16 @@ import pandas as pd
 import cea.config
 import cea.inputlocator
 from remap_ville_plugin.utilities import calc_gfa_per_use
+from utilities import select_buildings_from_candidates, get_building_candidates
+
+USE_TYPE_CONVERSION = {
+    'RETAIL': ['OFFICE', 'HOTEL', 'RESTAURANT'],
+    'MULTI_RES': ['HOTEL', 'OFFICE', 'SECONDARY_RES'],
+    'SCHOOL':['OFFICE', 'HOTEL', 'HOSPITAL', 'MULTI_RES'],
+    'OFFICE': ['RETAIL', 'LIBRARY', 'MULTI_RES'],
+    'INDUSTRIAL':['OFFICE', 'RESTAURANT', 'HOTEL', 'HOSPITAL', 'LIBRARY'],
+    'PARKING': ['RESTAURANT', 'GYM', 'MULTI_RES']
+}
 
 PARAMS = {
     'scenario_count': 10,
@@ -42,8 +52,12 @@ def main(config, typology_statusquo, case_inputs):
     # get additional required gfa per use
     gfa_per_use_additional = gfa_per_use_future_target - gfa_per_use_statusquo
     gfa_per_use_additional["MULTI_RES"] = gfa_per_use_additional["MULTI_RES"] - gfa_res_planned
-    print(f'Diminishing uses: {gfa_per_use_additional[gfa_per_use_additional < 0].index.values}')
-    gfa_per_use_additional[gfa_per_use_additional < 0] = 0.0  # FIXME: TRANSFORM THE USETYPE THAT IS DIMINISHING
+    if config.remap_ville_scenarios.district_archetype == 'RRL':
+        # convert diminishing uses
+        gfa_per_use_additional, typology_statusquo = convert_diminishing_uses(gfa_per_use_additional, typology_statusquo)
+
+    # remove additional GFA < 50
+    gfa_per_use_additional[gfa_per_use_additional < 50] = 0.0
     # transform part of SECONDARY_RES to MULTI_RES
     gfa_per_use_additional, \
     gfa_per_use_future_target, \
@@ -66,6 +80,102 @@ def main(config, typology_statusquo, case_inputs):
     overview["gfa_per_use_additional_target"] = gfa_per_use_additional.astype(int)
     return gfa_per_use_future_target, gfa_per_use_additional_target, gfa_total_additional_target, overview, \
            rel_ratio_to_res_gfa_target, typology_planned, typology_statusquo
+
+
+def convert_diminishing_uses(gfa_per_use_additional, typology_statusquo):
+    print(f'Diminishing uses: {gfa_per_use_additional[gfa_per_use_additional < 0].index.values}')
+    diminishing_uses = gfa_per_use_additional[gfa_per_use_additional < 0]
+    for use_to_reduce in diminishing_uses.index:
+        gfa_to_reduce = abs(diminishing_uses[use_to_reduce])
+        print('\nStarting to reduce', use_to_reduce, 'with GFA:', int(gfa_to_reduce))
+        gfa_to_add_list = [gfa_per_use_additional[use_to_add] for use_to_add in USE_TYPE_CONVERSION[use_to_reduce]]
+        # gfa_to_add_list.sort(reverse=True) # no need to order by GFA
+        for gfa_to_add in gfa_to_add_list:
+            use_to_add = gfa_per_use_additional[np.isclose(gfa_per_use_additional, gfa_to_add)].index[0]
+            print(f'...seeking to add {use_to_add} with {int(gfa_per_use_additional[use_to_add])} m2')
+            # select possible buildings to remove from statusquo
+            floors_usetype_sq, footprint_usetype_sq = get_building_candidates(use_to_reduce, typology_statusquo)
+            if gfa_to_add > gfa_to_reduce:  # convert all gfa_to_reduce
+                selected_floors_to_convert = select_buildings_from_candidates(gfa_to_reduce,
+                                                                              floors_usetype_sq,
+                                                                              footprint_usetype_sq)  # convert all
+            else:  # convert required gfa_to_add
+                selected_floors_to_convert = select_buildings_from_candidates(gfa_to_add,
+                                                                              floors_usetype_sq, footprint_usetype_sq)
+            if selected_floors_to_convert is not None:
+                updated_floors_reduced_use = floors_usetype_sq - selected_floors_to_convert
+                print(f'...converting {len(selected_floors_to_convert)} buildings from {use_to_reduce} to {use_to_add}')
+                gfa_converted = 0.0
+                for b in selected_floors_to_convert.index:
+                    building_usetypes = typology_statusquo.loc[b, ['1ST_USE', '2ND_USE', '3RD_USE']]
+                    use_to_reduce_order = building_usetypes[building_usetypes == use_to_reduce].index[0]
+                    if np.isclose(updated_floors_reduced_use[b], 0.0):
+                        typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace(
+                            {str(use_to_reduce): str(use_to_add)})
+                    else:
+                        typology_statusquo.loc[b, use_to_reduce_order + '_F'] = updated_floors_reduced_use[b]
+                        # add use
+                        use_to_add_order = building_usetypes[building_usetypes == "NONE"].index[0]
+                        typology_statusquo.loc[b, use_to_add_order] = use_to_add
+                        typology_statusquo.loc[b, use_to_add_order + '_F'] = selected_floors_to_convert[b]
+                        typology_statusquo = update_typology_R_GFA_from_F(b, typology_statusquo)
+                    typology_statusquo.loc[b, 'REFERENCE_x'] = f'from {use_to_reduce_order} to {use_to_add}'
+                    gfa_converted_b = typology_statusquo.loc[b, 'footprint'] * selected_floors_to_convert[b]
+                    gfa_converted += gfa_converted_b
+                print('...total gfa_converted', int(gfa_converted))
+                gfa_additional = gfa_per_use_additional[use_to_add] - gfa_converted
+                gfa_per_use_additional[use_to_add] = gfa_additional if gfa_additional > 1 else 0.0
+                print(f'{use_to_add} gfa_per_use_additional', int(gfa_per_use_additional[use_to_add]))
+                gfa_to_reduce = gfa_to_reduce - gfa_converted
+            print(f'...remaining {use_to_reduce} gfa_to_reduce', int(gfa_to_reduce), 'm2')
+            gfa_per_use_additional[use_to_reduce] = gfa_to_reduce * (-1)
+            if gfa_to_reduce < 0.0:
+                gfa_per_use_additional[use_to_reduce] = 0.0
+                break
+        # gfa_per_use_additional[use_to_reduce] = 0.0
+        print(f'{use_to_reduce} gfa_per_use_additional', int(gfa_per_use_additional[use_to_reduce]), '\n')
+    # removing uses from typology_statusquo
+    print(gfa_per_use_additional[diminishing_uses.index])
+    for use_to_remove in diminishing_uses.index:
+        floors_usetype_sq, footprint_usetype_sq = get_building_candidates(use_to_remove, typology_statusquo)
+        gfa_to_remove = abs(gfa_per_use_additional[use_to_remove])
+        if gfa_to_remove > min(footprint_usetype_sq):
+            selected_floors_to_remove = select_buildings_from_candidates(gfa_to_remove,
+                                                                         floors_usetype_sq, footprint_usetype_sq)
+            for b in selected_floors_to_remove.index:
+                updated_floors_reduced_use = floors_usetype_sq[b] - selected_floors_to_remove[b]
+                building_usetypes = typology_statusquo.loc[b, ['1ST_USE', '2ND_USE', '3RD_USE']]
+                use_to_remove_order = building_usetypes[building_usetypes == use_to_remove].index[0]
+                typology_statusquo.loc[b, use_to_remove_order + '_F'] = updated_floors_reduced_use
+                # update floors_ag
+                updated_total_floors = typology_statusquo.loc[b].filter(like='_F').sum()
+                if updated_total_floors == 1:
+                    typology_statusquo['floors_ag'] = 1
+                    typology_statusquo['floors_bg'] = 0
+                else:
+                    typology_statusquo['floors_bg'] = 1
+                    typology_statusquo['floors_ag'] = updated_total_floors - typology_statusquo['floors_bg']
+                if typology_statusquo.loc[b].filter(like='_F').sum() > 0:
+                    typology_statusquo = update_typology_R_GFA_from_F(b, typology_statusquo)
+                else:
+                    typology_statusquo = typology_statusquo.drop(b)
+        gfa_per_use_additional[use_to_remove] = 0.0
+    return gfa_per_use_additional, typology_statusquo
+
+
+def update_typology_R_GFA_from_F(b, typology_statusquo):
+    total_floors_statusquo = typology_statusquo.loc[b, ['floors_ag', 'floors_bg']].sum()
+    # update ratios and GFA per use
+    total_floors = typology_statusquo.loc[b].filter(like='_F').sum()
+    assert total_floors == total_floors_statusquo
+    typology_statusquo.loc[b, ['1ST_USE_R', '2ND_USE_R', '3RD_USE_R']] = [
+        typology_statusquo.loc[b, use_order + '_F'] / total_floors for use_order in
+        ['1ST_USE', '2ND_USE', '3RD_USE']]
+    typology_statusquo.loc[b, ['GFA_1ST_USE', 'GFA_2ND_USE', 'GFA_3RD_USE']] = [
+        typology_statusquo.loc[b, use_order + '_R'] * typology_statusquo.loc[b, 'GFA_m2'] for
+        use_order in
+        ['1ST_USE', '2ND_USE', '3RD_USE']]
+    return typology_statusquo
 
 
 def remove_buildings_by_uses(typology_df: pd.DataFrame, uses_to_remove: list):
@@ -201,9 +311,10 @@ def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_fut
             typology_statusquo.loc[b, 'REFERENCE_x'] = 'from SINGLE_RES'
         gfa_per_use_future_target["SINGLE_RES"] = gfa_per_use_future_target[
                                                                "SINGLE_RES"] - gfa_to_MULTI_RES
-        gfa_per_use_additional_required["MULTI_RES"] = gfa_per_use_additional_required[
-                                                           "MULTI_RES"] - extra_gfa_from_SINGLE_RES_conversion
-        assert gfa_per_use_additional_required["MULTI_RES"] > 0.0
+        if gfa_per_use_additional_required["MULTI_RES"] > 0.0:
+            gfa_per_use_additional_required["MULTI_RES"] = gfa_per_use_additional_required[
+                                                               "MULTI_RES"] - extra_gfa_from_SINGLE_RES_conversion
+        assert gfa_per_use_additional_required["MULTI_RES"] >= 0.0
 
     return gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo
 
@@ -223,10 +334,10 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
     if 'SECONDARY_RES' in gfa_per_use_additional_required.index:
         required_SECONDARY_RES_gfa = gfa_per_use_additional_required['SECONDARY_RES']
     required_MULTI_RES_gfa = gfa_per_use_additional_required['MULTI_RES']
-    if SECONDARY_RES_gfa > 0 and np.isclose(required_SECONDARY_RES_gfa, 0.0) and SECONDARY_RES_gfa / required_MULTI_RES_gfa > 10:
+    if SECONDARY_RES_gfa > 0 and np.isclose(required_SECONDARY_RES_gfa, 0.0) and SECONDARY_RES_gfa / required_MULTI_RES_gfa > 10 and required_MULTI_RES_gfa > 0:
         delta_gfa_dict = {}
         buffer = required_MULTI_RES_gfa * 0.1
-        for i in range(1000):
+        for i in range(100):
             num_sampled_buildings = random.randrange(0, len(SECONDARY_RES_buildings))
             sampled_buildings = random.sample(set(SECONDARY_RES_buildings), num_sampled_buildings)
             sampled_gfa = typology_statusquo.loc[sampled_buildings]['GFA_m2'].sum()
