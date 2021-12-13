@@ -353,8 +353,6 @@ def get_prop_geometry(locator):
     """
     architecture_dbf = dbf_to_dataframe(locator.get_building_architecture()).set_index('Name')
     zone_gdf = gpd.read_file(locator.get_zone_geometry())
-    if not 'city_zone' in zone_gdf.columns:
-        zone_gdf['city_zone'] = 0  # TODO: temp fix
     prop_geometry = zone_gdf.copy()
     prop_geometry['footprint'] = zone_gdf.area
     prop_geometry['GFA_m2'] = prop_geometry['footprint'] * (prop_geometry['floors_ag'] + prop_geometry['floors_bg'])
