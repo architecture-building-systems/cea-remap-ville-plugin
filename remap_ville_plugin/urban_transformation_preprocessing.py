@@ -125,7 +125,8 @@ def convert_diminishing_uses(gfa_per_use_additional, typology_statusquo):
                             typology_statusquo.loc[b, use_to_add_order] = use_to_add
                         typology_statusquo.loc[b, use_to_add_order + '_F'] = typology_statusquo.loc[b, use_to_add_order + '_F'] + selected_floors_to_convert[b]
                         typology_statusquo = update_typology_R_GFA_from_F(b, typology_statusquo)
-                    typology_statusquo.loc[b, 'REFERENCE_x'] = f'from {use_to_reduce_order} to {use_to_add}'
+                    typology_statusquo.loc[b, 'orig_uses'].append(use_to_reduce)
+                    typology_statusquo.loc[b, 'new_uses'].append(use_to_add)
                     gfa_converted_b = typology_statusquo.loc[b, 'footprint'] * selected_floors_to_convert[b]
                     gfa_converted += gfa_converted_b
                 print(f'\tgfa convereted to {use_to_add}:', int(gfa_converted))
@@ -275,7 +276,7 @@ def calc_gfa_per_use_future_target(future_required_additional_res_gfa,
 def convert_OFFICE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo, case_inputs):
     typology_usetype = typology_statusquo[typology_statusquo['1ST_USE'] == 'OFFICE'][typology_statusquo['1ST_USE_R'] >= 1.0]
     buildings_usetype = list(typology_usetype.index)
-    print(f'{len(buildings_usetype)} OFFICE in the district.')
+    print(f'\t{len(buildings_usetype)} OFFICE in the district.')
     num_buildings_to_MULTI_RES = int(len(buildings_usetype) * case_inputs['OFFICE_to_MULTI_RES_ratio'])
     if num_buildings_to_MULTI_RES > 0.0:
         buildings_to_MULTI_RES = random.sample(buildings_usetype, num_buildings_to_MULTI_RES)
@@ -285,6 +286,8 @@ def convert_OFFICE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_fut
             building_gfa = typology_statusquo.loc[b]['GFA_m2']
             gfa_to_MULTI_RES += building_gfa
             typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"OFFICE": "MULTI_RES"})
+            typology_statusquo.loc[b, 'orig_uses'].append('OFFICE')
+            typology_statusquo.loc[b, 'new_uses'].append('MULTI_RES')
             typology_statusquo.loc[b, 'REFERENCE_x'] = 'from OFFICE'
             b_count += 1
             if gfa_to_MULTI_RES > gfa_per_use_additional_required["MULTI_RES"]:
@@ -299,7 +302,7 @@ def convert_OFFICE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_fut
 
 def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo, case_inputs):
     buildings_SINGLE_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SINGLE_RES'].index)
-    print(f'{len(buildings_SINGLE_RES)} SINGLE_RES in the district.')
+    print(f'\t{len(buildings_SINGLE_RES)} SINGLE_RES in the district.')
     num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * case_inputs['SINGLE_to_MULTI_RES_ratio'])
     print('MULTI_RES additional required:', gfa_per_use_additional_required["MULTI_RES"])
     if num_buildings_to_MULTI_RES > 0.0:
@@ -315,6 +318,8 @@ def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_fut
                     case_inputs["future_MFH_density"] / PARAMS["ratio_living_space_to_GFA"])
             extra_gfa_from_SINGLE_RES_conversion += extra_gfa # extra gfa to host additional population
             typology_statusquo.loc[b, :] = typology_statusquo.loc[b].replace({"SINGLE_RES": "MULTI_RES"})
+            typology_statusquo.loc[b, 'orig_uses'].append('SINGLE_RES')
+            typology_statusquo.loc[b, 'new_uses'].append('MULTI_RES')
             typology_statusquo.loc[b, 'REFERENCE_x'] = 'from SINGLE_RES'
         gfa_per_use_future_target["SINGLE_RES"] = gfa_per_use_future_target[
                                                                "SINGLE_RES"] - gfa_to_MULTI_RES
@@ -337,7 +342,7 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
     """
     SECONDARY_RES_buildings = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SECONDARY_RES'].index)
     SECONDARY_RES_gfa = typology_statusquo.loc[SECONDARY_RES_buildings]['GFA_m2'].sum()
-    print('\n', len(SECONDARY_RES_buildings), 'SECONDARY_RES buildings in the district.')
+    print('\t', len(SECONDARY_RES_buildings), 'SECONDARY_RES buildings in the district.')
     required_SECONDARY_RES_gfa = 0.0
     if 'SECONDARY_RES' in gfa_per_use_additional_required.index:
         required_SECONDARY_RES_gfa = gfa_per_use_additional_required['SECONDARY_RES']
@@ -345,7 +350,7 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
     if SECONDARY_RES_gfa > 0 and np.isclose(required_SECONDARY_RES_gfa, 0.0) and SECONDARY_RES_gfa / required_MULTI_RES_gfa > 10 and required_MULTI_RES_gfa > 0:
         delta_gfa_dict = {}
         buffer = required_MULTI_RES_gfa * 0.1
-        for i in range(100):
+        for i in range(1000):
             num_sampled_buildings = random.randrange(0, len(SECONDARY_RES_buildings))
             sampled_buildings = random.sample(set(SECONDARY_RES_buildings), num_sampled_buildings)
             sampled_gfa = typology_statusquo.loc[sampled_buildings]['GFA_m2'].sum()
@@ -355,7 +360,9 @@ def convert_SECONDARY_to_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_
         buildings_to_MULTI_RES = delta_gfa_dict[min(delta_gfa_dict.keys())]
         print('Converting...', len(buildings_to_MULTI_RES), 'SECONDARY_RES to MULTI_RES')
         typology_statusquo.loc[buildings_to_MULTI_RES, '1ST_USE'] = 'MULTI_RES'
-        typology_statusquo.loc[buildings_to_MULTI_RES, 'REFERENCE_x'] = 'from SECONDARY_RES'
+        typology_statusquo.loc[buildings_to_MULTI_RES, 'orig_uses'] = pd.Series([['SECONDARY_RES'] for _ in buildings_to_MULTI_RES], index=buildings_to_MULTI_RES)
+        typology_statusquo.loc[buildings_to_MULTI_RES, 'new_uses'] = pd.Series([['MULTI_RES'] for _ in buildings_to_MULTI_RES], index=buildings_to_MULTI_RES)
+        typology_statusquo.loc[buildings_to_MULTI_RES, 'REFERENCE_x'] = 'from SECONDARY_RES' # TODO: remove
         # update targets
         SECONDARY_to_MULTI_RES_gfa = typology_statusquo.loc[buildings_to_MULTI_RES]['GFA_m2'].sum()
         gfa_per_use_additional_required['MULTI_RES'] = max(required_MULTI_RES_gfa - SECONDARY_to_MULTI_RES_gfa, 0)
