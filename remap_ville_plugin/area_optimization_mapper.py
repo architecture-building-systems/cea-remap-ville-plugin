@@ -176,8 +176,8 @@ def calculate_result_metrics(
             sub_building_footprint_area[v] * result_additional_floors[v] for v in result_additional_floors)
         abs_error = abs(total_additional_gfa_target - result_additional_gfa)
         rel_error = abs_error / total_additional_gfa_target
-        print("compare total target [%.1f] vs. actual [%.1f]" % (total_additional_gfa_target, result_additional_gfa))
-        print("total absolute error [%.1f], relative error [%.4f]" % (abs_error, rel_error))
+        print("\tcompare total target [%.1f] vs. actual [%.1f]" % (total_additional_gfa_target, result_additional_gfa))
+        print("\ttotal absolute error [%.1f], relative error [%.4f]" % (abs_error, rel_error))
     else:
         abs_error = 1e20
         rel_error = 1e20
