@@ -12,7 +12,7 @@ from cea.utilities.dbf import dbf_to_dataframe
 from remap_ville_plugin.utilities import save_updated_typology, filter_buildings_by_year, order_uses_in_typology
 from remap_ville_plugin.create_technology_database import create_input_technology_folder, update_indoor_comfort
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
-from utilities import select_buildings_from_candidates, get_building_candidates
+from utilities import select_buildings_from_candidates, get_building_candidates, calc_gfa_per_use
 
 path_to_folder = r'C:\Users\shsieh\Desktop\TEST_UT_REDUCE\Echallens'
 use_cols = ['MULTI_RES', 'SINGLE_RES', 'SECONDARY_RES', 'HOTEL', 'OFFICE', 'RETAIL', 'FOODSTORE',
@@ -33,7 +33,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
         typology_dict[scenario_name] = get_district_typology_merged(scenario_locator.get_input_folder())
     gfa_per_use_years_df = pd.concat([get_gfa_per_usetype(typology_dict[key], key) for key in typology_dict.keys()])
     # calculate 2040 according to 2020
-    typology_statusquo = typology_dict[scenario_statusquo]
+    typology_statusquo = typology_dict[scenario_statusquo].copy()
     gfa_per_use_future_target, _, _, _, _, _, _ = preprocessing.main(config, typology_statusquo, case_study_inputs, type='intermediate')
     # missing_usetypes = set(use_cols) - set(gfa_per_use_future_target.index)
     # gfa_per_use_intermediate = gfa_per_use_future_target.add(pd.Series(index=missing_usetypes), fill_value=0.0)
@@ -47,12 +47,11 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     if case_study_inputs['MULTI_RES_PLANNED'] in diff_gfa.index:
         diff_gfa['MULTI_RES'] = diff_gfa['MULTI_RES'] - diff_gfa[case_study_inputs['MULTI_RES_PLANNED']]
         diff_gfa = diff_gfa.drop(labels=case_study_inputs['MULTI_RES_PLANNED'])
+    uses_to_add_back = []
     for use in diff_gfa.index:
         if np.isclose(gfa_per_use_years_df.loc[scenario_endstate,use], gfa_per_use_years_df.loc[scenario_statusquo,use]):
             diff_gfa[use] = 0.0
-            print(f'\ndiff_gfa for {use} is set to 0.0')
-        elif gfa_per_use_years_df.loc[scenario_endstate,use] < gfa_per_use_years_df.loc[scenario_statusquo,use]:
-            print(f'diminishing uses {use}')
+            print(f'diff_gfa for {use} is set to 0.0')
 
     # 3. modify buildings
     typology_endstate = typology_dict[scenario_endstate]
@@ -71,10 +70,22 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
                                                                                typology_dict,
                                                                                typology_updated, typology_endstate,
                                                                                year_endstate)
+    # intermediate typology (RRL-DGT)
+    if config.remap_ville_scenarios.district_archetype == 'RRL':
+        typology_updated, typology_endstate, diff_gfa = calc_intermediate_state_for_diminishing_uses(diff_gfa,
+                                                                                                     gfa_per_use_years_df,
+                                                                                                     scenario_endstate,
+                                                                                                     scenario_statusquo,
+                                                                                                     scenario_year,
+                                                                                                     typology_dict,
+                                                                                                     typology_endstate,
+                                                                                                     typology_updated,
+                                                                                                     uses_to_add_back)
+
     buildings_modified = set()
     for usetype in diff_gfa.index:
         print('\n', usetype, 'GFA to reduce', round(diff_gfa[usetype], 1))
-        if round(diff_gfa[usetype]) > 0:  # FIXME: quick solve to only move when m2 > 100
+        if round(diff_gfa[usetype]) > 0:
             typology_updated, buildings_modified_usetype = modify_typology_per_building_usetype(usetype,
                                                                                                 typology_updated,
                                                                                                 typology_endstate,
@@ -86,7 +97,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
                 gfa_updated = get_gfa_per_usetype(typology_updated, scenario_intermediate).loc[
                     scenario_intermediate, usetype]
                 gfa_projected = gfa_per_use_years_df.loc[scenario_intermediate, usetype]
-                print('GFA(updated):', round(gfa_updated), ' GFA(projected):', round(gfa_projected))
+                print('\tGFA(updated):', round(gfa_updated), ' GFA(projected):', round(gfa_projected))
     # 4. save typology_updated, zone_updated
     buildings_not_yet_built = set(list(typology_endstate.index)) - set(list(typology_updated.index))
     buildings_modified = list(buildings_modified - buildings_not_yet_built)
@@ -123,6 +134,75 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     folder_name = f"{district_archetype}_{year}_{urban_development_scenario}"
     create_input_technology_folder(folder_name, new_locator)
     update_indoor_comfort('SQ', new_locator)
+
+
+def calc_intermediate_state_for_diminishing_uses(diff_gfa, gfa_per_use_years_df, scenario_endstate,
+                                                 scenario_statusquo, scenario_year, typology_dict, typology_endstate,
+                                                 typology_updated, uses_to_add_back):
+    # add uses to typology_updated from typology_endstate
+    for use in diff_gfa.index:
+        if gfa_per_use_years_df.loc[scenario_endstate, use] < gfa_per_use_years_df.loc[scenario_statusquo, use]:
+            diff_gfa_use = gfa_per_use_years_df.loc[scenario_statusquo, use] - gfa_per_use_years_df.loc[
+                scenario_endstate, use]
+            diff_gfa[use] = round(diff_gfa_use / 2) * (-1)
+            uses_to_add_back.append(use)
+            print(f'add back {use} from typology_endstate: {diff_gfa[use]}')
+    buildings_removed_in_endstate = set(typology_dict[scenario_statusquo].index) - set(
+        typology_dict[scenario_endstate].index)
+    typology_removed_in_endstate = typology_dict[scenario_statusquo].loc[buildings_removed_in_endstate]
+    for use in uses_to_add_back:
+        gfa_to_add_intermediate = abs(diff_gfa[use])
+        print(f'\nAdding {use} to typology_updated: {gfa_to_add_intermediate} m2')
+        buildings_avail_to_revert = typology_removed_in_endstate[typology_removed_in_endstate['1ST_USE'] == use].index
+        gfa_avail_to_add_sum = typology_removed_in_endstate.loc[buildings_avail_to_revert, 'GFA_m2'].sum()
+        if gfa_avail_to_add_sum > gfa_to_add_intermediate:
+            buildings_to_add_back = sample_buildings_to_match_gfa(buildings_avail_to_revert, gfa_to_add_intermediate,
+                                                                  typology_removed_in_endstate)
+        else:  # revert all
+            buildings_to_add_back = buildings_avail_to_revert
+        typology_updated = typology_updated.append(typology_removed_in_endstate.loc[buildings_to_add_back], sort=True)
+        gfa_added_back = typology_removed_in_endstate.loc[buildings_to_add_back, 'GFA_m2'].sum()
+        print(f'\tadd back {len(buildings_to_add_back)} to typology_updated: {round(gfa_added_back)}')
+        diff_gfa[use] += gfa_added_back
+        # convert some buildings
+        remaining_diff_gfa_use = abs(diff_gfa[use])
+        if remaining_diff_gfa_use > 0:
+            typology_avail_use = typology_endstate[typology_endstate['orig_uses'].str.contains(use)]
+            buildings_avail_to_convert = typology_avail_use.index
+            typology_avail_to_convert = typology_dict[scenario_statusquo].loc[buildings_avail_to_convert]
+            buildings_to_convert = sample_buildings_to_match_gfa(buildings_avail_to_convert, remaining_diff_gfa_use,
+                                                                 typology_avail_to_convert)
+            print(f'\tconverting {len(buildings_to_convert)} from {scenario_statusquo}')
+            # update diff_gfa
+            gfa_per_use_statusquo = calc_gfa_per_use(typology_dict[scenario_statusquo].loc[buildings_to_convert])
+            gfa_per_use_endstate = calc_gfa_per_use(typology_dict[scenario_endstate].loc[buildings_to_convert])
+            for idx in set(gfa_per_use_statusquo.index).union(set(gfa_per_use_endstate.index)):
+                end = gfa_per_use_endstate[idx] if idx in gfa_per_use_endstate.index else 0
+                sq = gfa_per_use_statusquo[idx] if idx in gfa_per_use_statusquo.index else 0
+                diff_gfa[idx] = diff_gfa[idx] - sq + end if diff_gfa[idx] > 0 else diff_gfa[idx] + sq - end
+            # update typology_statusquo
+            typology_updated = typology_updated.drop(buildings_to_convert)
+            typology_updated = typology_updated.append(typology_dict[scenario_statusquo].loc[buildings_to_convert],
+                                                       sort=True)
+            typology_updated.loc[buildings_to_convert, 'YEAR'] = scenario_year
+            typology_endstate = typology_endstate.drop(buildings_to_convert)
+        print(f'\tmismatched diff_gfa: {round(diff_gfa[use])}')
+    return typology_updated, typology_endstate, diff_gfa
+
+
+def sample_buildings_to_match_gfa(buildings_avail, gfa_target, typology_buildings_avail):
+    delta_gfa_dict = {}
+    for i in range(1000):
+        num_sampled_buildings = random.randrange(0, len(buildings_avail))
+        sampled_buildings = random.sample(list(buildings_avail), num_sampled_buildings)
+        total_gfa_sampled = 0.0
+        for b in sampled_buildings:
+            gfa_building = typology_buildings_avail.loc[b, 'GFA_m2']
+            total_gfa_sampled += gfa_building
+        delta_gfa = abs(round(gfa_target - total_gfa_sampled, 2))
+        delta_gfa_dict[delta_gfa] = sampled_buildings
+    buildings_sampled = delta_gfa_dict[min(delta_gfa_dict.keys())]
+    return buildings_sampled
 
 
 def revert_MULTI_RES_to_OFFICE(diff_gfa, scenario_statusquo, typology_dict, typology_updated, typology_endstate, year_endstate):
@@ -271,13 +351,15 @@ def get_district_typology_merged(path_to_input):
     typology_merged['floors_all'] = typology_merged['floors_ag'] + typology_merged['floors_bg']
     for use_order in ['1ST_USE', '2ND_USE', '3RD_USE']:
         typology_merged["GFA_" + use_order] = typology_merged[use_order + "_R"] * typology_merged["GFA_m2"]
-        typology_merged[use_order + '_F'] = (
-            round(typology_merged['floors_all'] * typology_merged[use_order + '_R'])).astype(
-            int)
+        typology_merged[use_order + '_F'] = (round(typology_merged['floors_all'] * typology_merged[use_order + '_R'])).astype(int)
     # initialize columns
     typology_merged["additional_floors"] = 0
     typology_merged["floors_ag_updated"] = typology_merged.floors_ag.astype(int)
     typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
+    if "orig_uses" not in typology_merged.columns:
+        typology_merged["orig_uses"] = [[] for _ in range(len(typology_merged))]
+    if "new_uses" not in typology_merged.columns:
+        typology_merged["new_uses"] = [[] for _ in range(len(typology_merged))]
     typology_merged.fillna('-', inplace=True)
     return typology_merged
 
@@ -303,7 +385,7 @@ def get_gfa_per_usetype(typology_merged, key):
 
 if __name__ == "__main__":
     config = cea.config.Configuration()
-    config.project = r'C:\Users\shsieh\Desktop\TEST_A\test_new'
+    config.project = r'C:\Users\shsieh\Desktop\TEST_AI'
 
     scenario_locator_sequences = {}
     s_name = '2020'
@@ -318,7 +400,7 @@ if __name__ == "__main__":
     scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
 
     config.remap_ville_scenarios.year = 2040
-    config.remap_ville_scenarios.urban_development_scenario = 'BAU'
+    config.remap_ville_scenarios.urban_development_scenario = 'DGT'
     s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}_test'
     config.scenario_name = s_name
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
