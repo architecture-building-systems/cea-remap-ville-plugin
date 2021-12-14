@@ -13,14 +13,14 @@ def save_updated_typology(path_to_output_typology_file, simulated_typology):
     keep = list()
     columns_to_keep = [("Name", str), ("YEAR", int), ("STANDARD", str), ("1ST_USE", str), ("1ST_USE_R", float),
                        ("2ND_USE", str), ("2ND_USE_R", float), ("3RD_USE", str), ("3RD_USE_R", float),
-                       ("REFERENCE", str)]
+                       ("orig_uses", str), ("new_uses", str), ("REFERENCE", str)]
     for column, column_type in columns_to_keep:
         keep.append(column)
         output[column] = output[column].astype(column_type)
     if output.isnull().sum().sum() > 0:
         raise ValueError('nan values in output')
     dataframe_to_dbf(output[keep], str(path_to_output_typology_file.absolute()))
-    print(f'typology.dbf updated: {str(path_to_output_typology_file.absolute())}')
+    print(f'\ttypology.dbf updated: {str(path_to_output_typology_file.absolute())}')
     return
 
 def copy_folder(src, dst):
