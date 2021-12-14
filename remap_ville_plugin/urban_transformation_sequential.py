@@ -34,9 +34,7 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
     gfa_per_use_years_df = pd.concat([get_gfa_per_usetype(typology_dict[key], key) for key in typology_dict.keys()])
     # calculate 2040 according to 2020
     typology_statusquo = typology_dict[scenario_statusquo]
-    gfa_per_use_future_target, gfa_per_use_additional_target, gfa_total_additional_target, \
-    overview, rel_ratio_to_res_gfa_target, \
-    typology_planned, typology_statusquo = preprocessing.main(config, typology_statusquo, case_study_inputs)
+    gfa_per_use_future_target, _, _, _, _, _, _ = preprocessing.main(config, typology_statusquo, case_study_inputs, type='intermediate')
     # missing_usetypes = set(use_cols) - set(gfa_per_use_future_target.index)
     # gfa_per_use_intermediate = gfa_per_use_future_target.add(pd.Series(index=missing_usetypes), fill_value=0.0)
     # gfa_per_use_intermediate = gfa_per_use_future_target.fillna(0.0)
@@ -53,6 +51,8 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
         if np.isclose(gfa_per_use_years_df.loc[scenario_endstate,use], gfa_per_use_years_df.loc[scenario_statusquo,use]):
             diff_gfa[use] = 0.0
             print(f'\ndiff_gfa for {use} is set to 0.0')
+        elif gfa_per_use_years_df.loc[scenario_endstate,use] < gfa_per_use_years_df.loc[scenario_statusquo,use]:
+            print(f'diminishing uses {use}')
 
     # 3. modify buildings
     typology_endstate = typology_dict[scenario_endstate]
@@ -303,7 +303,7 @@ def get_gfa_per_usetype(typology_merged, key):
 
 if __name__ == "__main__":
     config = cea.config.Configuration()
-    config.project = r'C:\Users\shsieh\Desktop\TEST_A'
+    config.project = r'C:\Users\shsieh\Desktop\TEST_A\test_new'
 
     scenario_locator_sequences = {}
     s_name = '2020'
@@ -313,19 +313,20 @@ if __name__ == "__main__":
     worksheet = f"{config.remap_ville_scenarios.district_archetype}_{config.remap_ville_scenarios.urban_development_scenario}"
     case_study_inputs_df = pd.read_excel(path_to_case_study_inputs, sheet_name=worksheet).set_index('year')
     s_name = '2060_DGT'
+    year_endstate = 2060
     config.scenario_name = s_name
     scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
 
     config.remap_ville_scenarios.year = 2040
-    config.remap_ville_scenarios.urban_development_scenario = 'DGT'
+    config.remap_ville_scenarios.urban_development_scenario = 'BAU'
     s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}_test'
     config.scenario_name = s_name
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    scenario_year = int(config.remap_ville_scenarios.year)
+    year_intermediate = int(config.remap_ville_scenarios.year)
     case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
     os.mkdir(config.scenario)
     os.mkdir(new_locator.get_input_folder())
     os.mkdir(new_locator.get_building_geometry_folder())
     os.mkdir(new_locator.get_building_properties_folder())
 
-    main(config, new_locator, scenario_locator_sequences, case_study_inputs, scenario_year)
+    main(config, new_locator, scenario_locator_sequences, case_study_inputs, year_intermediate, year_endstate)
