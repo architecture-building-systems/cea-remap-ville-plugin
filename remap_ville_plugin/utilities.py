@@ -100,7 +100,7 @@ def select_buildings_from_candidates(diff_gfa_usetype, floors_usetype, footprint
         for key in x_floors.keys():
             if x_floors[key].varValue > 0:
                 selected_floors_to_reduce_usetype[key] = x_floors[key].varValue
-        print(len(selected_floors_to_reduce_usetype), 'buildings selected.')
+        print('\t',len(selected_floors_to_reduce_usetype), 'buildings selected.')
     else:
         selected_floors_to_reduce_usetype = None
     return selected_floors_to_reduce_usetype
@@ -116,7 +116,7 @@ def get_building_candidates(building_usetype, typology_endstate):
     # print('GFA status-quo:', round((footprint_of_usetype * floors_of_usetype).sum(), 1))
     floors_of_usetype = floors_of_usetype[~np.isclose(floors_of_usetype, 0.0)]
     footprint_of_usetype = footprint_of_usetype[floors_of_usetype.index]
-    print(len(footprint_of_usetype), building_usetype, 'buildings are in district.')
+    print('\t', len(footprint_of_usetype), building_usetype, 'buildings are in district.')
     return floors_of_usetype, footprint_of_usetype
 
 
