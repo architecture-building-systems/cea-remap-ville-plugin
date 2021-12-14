@@ -55,8 +55,7 @@ def main(config, case_study_inputs_df):
     typology_statusquo = typology_merged.copy()
     gfa_per_use_future_target, gfa_per_use_additional_target, gfa_total_additional_target, \
     overview, rel_ratio_to_res_gfa_target, \
-    typology_planned, typology_statusquo = preprocessing.main(config, typology_statusquo, case_study_inputs)
-
+    typology_planned, typology_statusquo = preprocessing.main(config, typology_statusquo, case_study_inputs, type='end')
     ## 3. Finalize Inputs
     # filter out buildings by use
     typology_kept_uses, typology_untouched_uses = preprocessing.remove_buildings_by_uses(typology_statusquo,
@@ -142,8 +141,12 @@ def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_buildin
     zone_shp_updated = gpd.read_file(str(path_to_input_zone_shape_file))
     zone_shp_updated.fillna('-', inplace=True)
     zone_shp_updated = zone_shp_updated.set_index("Name")
+    zone_shp_updated = zone_shp_updated.loc[best_typology_df.index]
+    zone_shp_updated["floors_bg"] = best_typology_df["floors_bg"]
+    zone_shp_updated["height_bg"] = best_typology_df["floors_bg"] * 3
     zone_shp_updated["floors_ag"] = best_typology_df["floors_ag_updated"]
     zone_shp_updated["height_ag"] = best_typology_df["height_ag_updated"]
+    assert zone_shp_updated.isnull().sum().sum() <= 0
     zone_shp_updated.to_file(path_to_output_zone_shape_file)
     print(f'zone.shp updated: {path_to_output_zone_shape_file}')
     return floors_ag_additional, zone_shp_updated
