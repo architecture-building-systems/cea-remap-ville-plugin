@@ -52,12 +52,15 @@ def main(config, typology_statusquo, case_inputs, type):
     # get additional required gfa per use
     gfa_per_use_additional = gfa_per_use_future_target - gfa_per_use_statusquo
     gfa_per_use_additional["MULTI_RES"] = gfa_per_use_additional["MULTI_RES"] - gfa_res_planned
-    if config.remap_ville_scenarios.district_archetype=='RRL' and type=='end':
+    district_archetype = config.remap_ville_scenarios.district_archetype
+    if district_archetype=='RRL' and type=='end':
         # convert diminishing uses
         gfa_per_use_additional, typology_statusquo = convert_diminishing_uses(gfa_per_use_additional, typology_statusquo)
         gfa_per_use_additional[gfa_per_use_additional < 50] = 0.0 # remove additional GFA < 50
-    else:
+    elif district_archetype=='URB' or district_archetype=='SURB':
         gfa_per_use_additional[gfa_per_use_additional < 0] = 0.0 # FIXME: TEMP FIX
+    else:
+        gfa_per_use_additional = gfa_per_use_additional
     # transform part of SECONDARY_RES to MULTI_RES
     gfa_per_use_additional, \
     gfa_per_use_future_target, \
@@ -317,8 +320,8 @@ def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_fut
                                                                "SINGLE_RES"] - gfa_to_MULTI_RES
         gfa_per_use_future_target["MULTI_RES"] = gfa_per_use_future_target["MULTI_RES"] + gfa_to_MULTI_RES
         if gfa_per_use_additional_required["MULTI_RES"] > 0.0:
-            gfa_per_use_additional_required["MULTI_RES"] = gfa_per_use_additional_required[
-                                                               "MULTI_RES"] - extra_gfa_from_SINGLE_RES_conversion
+            gfa_per_use_additional_required["MULTI_RES"] = max(gfa_per_use_additional_required[
+                                                               "MULTI_RES"] - extra_gfa_from_SINGLE_RES_conversion, 0.0)
         assert gfa_per_use_additional_required["MULTI_RES"] >= 0.0
 
     return gfa_per_use_additional_required, gfa_per_use_future_target, typology_statusquo
