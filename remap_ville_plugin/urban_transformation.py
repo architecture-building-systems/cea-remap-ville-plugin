@@ -148,7 +148,7 @@ def update_zone_shp(best_typology_df, result_add_floors, building_to_sub_buildin
     zone_shp_updated["height_ag"] = best_typology_df["height_ag_updated"]
     assert zone_shp_updated.isnull().sum().sum() <= 0
     zone_shp_updated.to_file(path_to_output_zone_shape_file)
-    print(f'zone.shp updated: {path_to_output_zone_shape_file}')
+    print(f'\tzone.shp updated: {path_to_output_zone_shape_file}')
     return floors_ag_additional, zone_shp_updated
 
 
@@ -257,7 +257,7 @@ def optimize_all_scenarios(range_additional_floors_per_building, scenarios, targ
             target_add_gfa_per_use,
             sub_building_use
         )
-        print("scenario [%i] is-success (if 1): [%i]\n " % (scenario, solution.sol_status))
+        print("\tscenario [%i] is-success (if 1): [%i]" % (scenario, solution.sol_status))
         # save solutions
         op_solutions[scenario] = {
             "solution": solution,
