@@ -64,10 +64,11 @@ def main(config, typology_statusquo, case_inputs, type):
             gfa_per_use_future_target = gfa_per_use_statusquo.copy()
             gfa_per_use_future_target['MULTI_RES'] = gfa_per_use_future_target['MULTI_RES'] - gfa_converted
             gfa_per_use_future_target['SECONDARY_RES'] = gfa_per_use_future_target['SECONDARY_RES'] + gfa_converted
-        elif urban_development_scenario=='DGT' or urban_development_scenario=='PUN' and type=='end':
-            # convert diminishing uses
-            gfa_per_use_additional, typology_statusquo = convert_diminishing_uses(gfa_per_use_additional, typology_statusquo)
-            gfa_per_use_additional[gfa_per_use_additional < 50] = 0.0 # remove additional GFA < 50
+        elif type == 'end':
+            if urban_development_scenario=='DGT' or urban_development_scenario=='PUN':
+                # convert diminishing uses
+                gfa_per_use_additional, typology_statusquo = convert_diminishing_uses(gfa_per_use_additional, typology_statusquo)
+                gfa_per_use_additional[gfa_per_use_additional < 50] = 0.0 # remove additional GFA < 50
     elif district_archetype=='URB' or district_archetype=='SURB':
         gfa_per_use_additional[gfa_per_use_additional < 0] = 0.0 # FIXME: TEMP FIX
     else:
