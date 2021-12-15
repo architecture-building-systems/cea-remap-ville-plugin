@@ -178,7 +178,7 @@ def calc_intermediate_state_for_diminishing_uses(diff_gfa, gfa_per_use_years_df,
         # convert some buildings
         remaining_diff_gfa_use = abs(diff_gfa[use])
         if remaining_diff_gfa_use > 0:
-            typology_avail_use = typology_endstate[typology_endstate['orig_uses'].str.contains(use)]
+            typology_avail_use = typology_endstate[typology_endstate['orig_uses'].astype(str).str.contains(use)]
             buildings_avail_to_convert = typology_avail_use.index
             typology_avail_to_convert = typology_dict[scenario_statusquo].loc[buildings_avail_to_convert]
             buildings_to_convert = sample_buildings_to_match_gfa(buildings_avail_to_convert, remaining_diff_gfa_use,
@@ -409,17 +409,17 @@ if __name__ == "__main__":
     path_to_case_study_inputs = os.path.join(config.scenario, "case_study_inputs.xlsx")
     worksheet = f"{config.remap_ville_scenarios.district_archetype}_{config.remap_ville_scenarios.urban_development_scenario}"
     case_study_inputs_df = pd.read_excel(path_to_case_study_inputs, sheet_name=worksheet).set_index('year')
-    s_name = '2040_BAU'
-    year_endstate = 2040
+    s_name = '2060_DGT'
+    year_endstate = 2060
     config.scenario_name = s_name
     scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
 
-    config.remap_ville_scenarios.year = 2060
-    config.remap_ville_scenarios.urban_development_scenario = 'BAU'
+    config.remap_ville_scenarios.year = 2040
+    config.remap_ville_scenarios.urban_development_scenario = 'DGT'
     s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}_test'
     config.scenario_name = s_name
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    year_intermediate = 2060
+    year_intermediate = 2040
     case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
     os.mkdir(config.scenario)
     os.mkdir(new_locator.get_input_folder())
