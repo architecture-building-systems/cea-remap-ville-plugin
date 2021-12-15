@@ -9,6 +9,8 @@ import random
 import cea.config
 import cea.inputlocator
 from cea.utilities.dbf import dbf_to_dataframe
+
+import utilities
 from remap_ville_plugin.utilities import save_updated_typology, filter_buildings_by_year, order_uses_in_typology
 from remap_ville_plugin.create_technology_database import create_input_technology_folder, update_indoor_comfort
 import remap_ville_plugin.urban_transformation_preprocessing as preprocessing
@@ -71,21 +73,30 @@ def main(config, new_locator, scenario_locator_sequences, case_study_inputs, sce
                                                                                typology_updated, typology_endstate,
                                                                                year_endstate)
     # intermediate typology (RRL-DGT)
-    if config.remap_ville_scenarios.district_archetype == 'RRL':
-        typology_updated, typology_endstate, diff_gfa = calc_intermediate_state_for_diminishing_uses(diff_gfa,
-                                                                                                     gfa_per_use_years_df,
-                                                                                                     scenario_endstate,
-                                                                                                     scenario_statusquo,
-                                                                                                     scenario_year,
-                                                                                                     typology_dict,
-                                                                                                     typology_endstate,
-                                                                                                     typology_updated,
-                                                                                                     uses_to_add_back)
+    if config.remap_ville_scenarios.district_archetype=='RRL':
+        if config.remap_ville_scenarios.urban_development_scenario=='DGT':
+            typology_updated, typology_endstate, diff_gfa = calc_intermediate_state_for_diminishing_uses(diff_gfa,
+                                                                                                         gfa_per_use_years_df,
+                                                                                                         scenario_endstate,
+                                                                                                         scenario_statusquo,
+                                                                                                         scenario_year,
+                                                                                                         typology_dict,
+                                                                                                         typology_endstate,
+                                                                                                         typology_updated,
+                                                                                                         uses_to_add_back)
+        elif config.remap_ville_scenarios.urban_development_scenario=='BAU':
+            # convert MULTI_RES to SINGLE_RES
+            gfa_to_convert = diff_gfa['MULTI_RES']
+            gfa_converted, buildings_converted, typology_endstate = utilities.convert_uses(gfa_to_convert, typology_endstate, 'MULTI_RES',
+                                                             'SECONDARY_RES')
+            typology_updated.loc[buildings_converted] = typology_endstate.loc[buildings_converted]
+            diff_gfa = pd.Series(data=np.zeros(len(diff_gfa)), index=list(diff_gfa.index))
+
 
     buildings_modified = set()
     for usetype in diff_gfa.index:
-        print('\n', usetype, 'GFA to reduce', round(diff_gfa[usetype], 1))
         if round(diff_gfa[usetype]) > 0:
+            print('\n', usetype, 'GFA to reduce', round(diff_gfa[usetype], 1))
             typology_updated, buildings_modified_usetype = modify_typology_per_building_usetype(usetype,
                                                                                                 typology_updated,
                                                                                                 typology_endstate,
@@ -358,8 +369,12 @@ def get_district_typology_merged(path_to_input):
     typology_merged["height_ag_updated"] = typology_merged.height_ag.astype(int)
     if "orig_uses" not in typology_merged.columns:
         typology_merged["orig_uses"] = [[] for _ in range(len(typology_merged))]
+    else:
+        typology_merged["orig_uses"] = typology_merged["orig_uses"].apply(lambda x: x.strip('[\'\']').split())
     if "new_uses" not in typology_merged.columns:
         typology_merged["new_uses"] = [[] for _ in range(len(typology_merged))]
+    else:
+        typology_merged["new_uses"] = typology_merged["new_uses"].apply(lambda x: x.strip('[\'\']').split())
     typology_merged.fillna('-', inplace=True)
     return typology_merged
 
@@ -394,17 +409,17 @@ if __name__ == "__main__":
     path_to_case_study_inputs = os.path.join(config.scenario, "case_study_inputs.xlsx")
     worksheet = f"{config.remap_ville_scenarios.district_archetype}_{config.remap_ville_scenarios.urban_development_scenario}"
     case_study_inputs_df = pd.read_excel(path_to_case_study_inputs, sheet_name=worksheet).set_index('year')
-    s_name = '2060_DGT'
-    year_endstate = 2060
+    s_name = '2040_BAU'
+    year_endstate = 2040
     config.scenario_name = s_name
     scenario_locator_sequences[s_name] = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
 
-    config.remap_ville_scenarios.year = 2040
-    config.remap_ville_scenarios.urban_development_scenario = 'DGT'
+    config.remap_ville_scenarios.year = 2060
+    config.remap_ville_scenarios.urban_development_scenario = 'BAU'
     s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}_test'
     config.scenario_name = s_name
     new_locator = cea.inputlocator.InputLocator(scenario=config.scenario, plugins=config.plugins)
-    year_intermediate = int(config.remap_ville_scenarios.year)
+    year_intermediate = 2060
     case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
     os.mkdir(config.scenario)
     os.mkdir(new_locator.get_input_folder())
