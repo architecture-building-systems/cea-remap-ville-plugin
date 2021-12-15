@@ -14,7 +14,8 @@ USE_TYPE_CONVERSION = {
     'MULTI_RES': ['HOTEL', 'OFFICE', 'SECONDARY_RES'],
     'SCHOOL':['OFFICE', 'HOTEL', 'HOSPITAL', 'MULTI_RES'],
     'OFFICE': ['RETAIL', 'LIBRARY', 'MULTI_RES'],
-    'INDUSTRIAL':['OFFICE', 'RESTAURANT', 'HOTEL', 'HOSPITAL', 'LIBRARY'],
+    'HOTEL': ['RETAIL', 'SCHOOL'],
+    'INDUSTRIAL':['OFFICE', 'RESTAURANT', 'HOTEL', 'HOSPITAL', 'LIBRARY', 'SCHOOL'],
     'PARKING': ['RESTAURANT', 'GYM', 'MULTI_RES']
 }
 
@@ -54,7 +55,8 @@ def main(config, typology_statusquo, case_inputs, type):
     gfa_per_use_additional["MULTI_RES"] = gfa_per_use_additional["MULTI_RES"] - gfa_res_planned
     district_archetype = config.remap_ville_scenarios.district_archetype
     if district_archetype=='RRL':
-        if config.remap_ville_scenarios.urban_development_scenario == 'BAU':
+        urban_development_scenario = config.remap_ville_scenarios.urban_development_scenario
+        if urban_development_scenario == 'BAU':
             # convert MULTI_RES to SECONDARY_RES
             gfa_to_convert = abs(gfa_per_use_additional['MULTI_RES'])
             gfa_converted, buildings_converted, typology_statusquo = convert_uses(gfa_to_convert, typology_statusquo, 'MULTI_RES', 'SECONDARY_RES')
@@ -62,7 +64,7 @@ def main(config, typology_statusquo, case_inputs, type):
             gfa_per_use_future_target = gfa_per_use_statusquo.copy()
             gfa_per_use_future_target['MULTI_RES'] = gfa_per_use_future_target['MULTI_RES'] - gfa_converted
             gfa_per_use_future_target['SECONDARY_RES'] = gfa_per_use_future_target['SECONDARY_RES'] + gfa_converted
-        elif config.remap_ville_scenarios.urban_development_scenario=='DGT' and type=='end':
+        elif urban_development_scenario=='DGT' or urban_development_scenario=='PUN' and type=='end':
             # convert diminishing uses
             gfa_per_use_additional, typology_statusquo = convert_diminishing_uses(gfa_per_use_additional, typology_statusquo)
             gfa_per_use_additional[gfa_per_use_additional < 50] = 0.0 # remove additional GFA < 50
@@ -100,7 +102,8 @@ def convert_diminishing_uses(gfa_per_use_additional, typology_statusquo):
     for use_to_reduce in diminishing_uses.index:
         gfa_to_reduce = abs(diminishing_uses[use_to_reduce])
         print('\nStarting to reduce', use_to_reduce, 'with GFA:', int(gfa_to_reduce))
-        gfa_to_add_list = [gfa_per_use_additional[use_to_add] for use_to_add in USE_TYPE_CONVERSION[use_to_reduce]]
+        gfa_to_add_list = [gfa_per_use_additional[use_to_add] for use_to_add in USE_TYPE_CONVERSION[use_to_reduce] if use_to_add in gfa_per_use_additional.index]
+        gfa_to_add_list = [i for i in gfa_to_add_list if i > 0] # keep positive
         # gfa_to_add_list.sort(reverse=True) # no need to order by GFA
         for gfa_to_add in gfa_to_add_list:
             use_to_add = gfa_per_use_additional[np.isclose(gfa_per_use_additional, gfa_to_add)].index[0]
@@ -143,13 +146,13 @@ def convert_diminishing_uses(gfa_per_use_additional, typology_statusquo):
                 gfa_per_use_additional[use_to_add] = gfa_additional if gfa_additional > 1 else 0.0
                 print(f'\t{use_to_add} additional required:', int(gfa_per_use_additional[use_to_add]))
                 gfa_to_reduce = gfa_to_reduce - gfa_converted
-            print(f'remaining {use_to_reduce} gfa_to_reduce', int(gfa_to_reduce), 'm2')
+            print(f'...remaining {use_to_reduce} gfa_to_reduce', int(gfa_to_reduce), 'm2')
             gfa_per_use_additional[use_to_reduce] = gfa_to_reduce * (-1) # update
             if gfa_to_reduce < 0.0:
                 gfa_per_use_additional[use_to_reduce] = 0.0
                 break
         # gfa_per_use_additional[use_to_reduce] = 0.0
-        print(f'{use_to_reduce} gfa_per_use_additional', int(gfa_per_use_additional[use_to_reduce]), '\n')
+        print(f'\t{use_to_reduce} gfa_per_use_additional', int(gfa_per_use_additional[use_to_reduce]), '\n')
     # removing uses from typology_statusquo
     print('Directly remove GFA:',gfa_per_use_additional[diminishing_uses.index])
     for use_to_remove in diminishing_uses.index:
