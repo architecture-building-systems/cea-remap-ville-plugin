@@ -7,7 +7,7 @@ import pandas as pd
 import cea.config
 import cea.inputlocator
 from remap_ville_plugin.utilities import calc_gfa_per_use
-from utilities import select_buildings_from_candidates, get_building_candidates
+from utilities import select_buildings_from_candidates, get_building_candidates, convert_uses
 
 USE_TYPE_CONVERSION = {
     'RETAIL': ['OFFICE', 'HOTEL', 'RESTAURANT'],
@@ -53,10 +53,19 @@ def main(config, typology_statusquo, case_inputs, type):
     gfa_per_use_additional = gfa_per_use_future_target - gfa_per_use_statusquo
     gfa_per_use_additional["MULTI_RES"] = gfa_per_use_additional["MULTI_RES"] - gfa_res_planned
     district_archetype = config.remap_ville_scenarios.district_archetype
-    if district_archetype=='RRL' and type=='end':
-        # convert diminishing uses
-        gfa_per_use_additional, typology_statusquo = convert_diminishing_uses(gfa_per_use_additional, typology_statusquo)
-        gfa_per_use_additional[gfa_per_use_additional < 50] = 0.0 # remove additional GFA < 50
+    if district_archetype=='RRL':
+        if config.remap_ville_scenarios.urban_development_scenario == 'BAU':
+            # convert MULTI_RES to SECONDARY_RES
+            gfa_to_convert = abs(gfa_per_use_additional['MULTI_RES'])
+            gfa_converted, buildings_converted, typology_statusquo = convert_uses(gfa_to_convert, typology_statusquo, 'MULTI_RES', 'SECONDARY_RES')
+            gfa_per_use_additional = pd.Series(data=np.zeros(len(gfa_per_use_additional)), index=list(gfa_per_use_additional.index))
+            gfa_per_use_future_target = gfa_per_use_statusquo.copy()
+            gfa_per_use_future_target['MULTI_RES'] = gfa_per_use_future_target['MULTI_RES'] - gfa_converted
+            gfa_per_use_future_target['SECONDARY_RES'] = gfa_per_use_future_target['SECONDARY_RES'] + gfa_converted
+        elif config.remap_ville_scenarios.urban_development_scenario=='DGT' and type=='end':
+            # convert diminishing uses
+            gfa_per_use_additional, typology_statusquo = convert_diminishing_uses(gfa_per_use_additional, typology_statusquo)
+            gfa_per_use_additional[gfa_per_use_additional < 50] = 0.0 # remove additional GFA < 50
     elif district_archetype=='URB' or district_archetype=='SURB':
         gfa_per_use_additional[gfa_per_use_additional < 0] = 0.0 # FIXME: TEMP FIX
     else:
@@ -304,9 +313,9 @@ def convert_SINGLE_TO_MULTI_RES(gfa_per_use_additional_required, gfa_per_use_fut
     buildings_SINGLE_RES = list(typology_statusquo.loc[typology_statusquo['1ST_USE'] == 'SINGLE_RES'].index)
     print(f'\t{len(buildings_SINGLE_RES)} SINGLE_RES in the district.')
     num_buildings_to_MULTI_RES = int(len(buildings_SINGLE_RES) * case_inputs['SINGLE_to_MULTI_RES_ratio'])
-    print('MULTI_RES additional required:', gfa_per_use_additional_required["MULTI_RES"])
     if num_buildings_to_MULTI_RES > 0.0:
         print('Converting...', num_buildings_to_MULTI_RES, 'SINGLE_RES to MULTI_RES')
+        print('\tMULTI_RES additional required:', gfa_per_use_additional_required["MULTI_RES"])
         buildings_to_MULTI_RES = random.sample(buildings_SINGLE_RES, num_buildings_to_MULTI_RES)
         extra_gfa_from_SINGLE_RES_conversion, gfa_to_MULTI_RES = 0.0, 0.0
         for b in buildings_to_MULTI_RES:
@@ -405,6 +414,6 @@ if __name__ == "__main__":
     config.remap_ville_scenarios.urban_development_scenario = 'BAU'
     s_name = f'{config.remap_ville_scenarios.year}_{config.remap_ville_scenarios.urban_development_scenario}'
     case_study_inputs = case_study_inputs_df.loc[int(config.remap_ville_scenarios.year)]
-    _, _, _, overview, _, _, _ = main(config, typology_statusquo, case_study_inputs)
+    _, _, _, overview, _, _, _ = main(config, typology_statusquo, case_study_inputs, type='intermediate')
     pd.DataFrame(overview).to_csv(os.path.join(config.scenario, s_name+'_gfa_targets.csv'))
 
