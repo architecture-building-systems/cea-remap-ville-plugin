@@ -5,7 +5,7 @@ import operator
 from collections import defaultdict
 
 import pulp
-from cea.utilities.dbf import dbf_to_dataframe, dataframe_to_dbf
+from cea.utilities.dbf import dataframe_to_dbf
 
 def save_updated_typology(path_to_output_typology_file, simulated_typology):
     simulated_typology_reindex = simulated_typology.reset_index()
@@ -154,3 +154,19 @@ def optimization_problem(diff_gfa_usetype, floors_of_usetype, footprint_of_usety
     # print(opt_problem)
     opt_problem.solve(pulp.GLPK(options=['--mipgap', '0.01'], msg=False))
     return x_floors
+
+
+def convert_uses(gfa_to_convert, typology_df, orig_use, new_use):
+    floors_usetype_sq, footprint_usetype_sq = get_building_candidates(orig_use, typology_df)
+    selected_floors_to_convert = select_buildings_from_candidates(gfa_to_convert,
+                                                                  floors_usetype_sq,
+                                                                  footprint_usetype_sq)
+    buildings_converted = selected_floors_to_convert.index
+    gfa_converted = 0.0
+    for b in buildings_converted:
+        typology_df.loc[b, :] = typology_df.loc[b].replace({orig_use: new_use})
+        typology_df.loc[b, 'orig_uses'].append(orig_use)
+        typology_df.loc[b, 'new_uses'].append(new_use)
+        gfa_converted += typology_df.loc[b, 'footprint'] * selected_floors_to_convert[b]
+    print(f'{round(gfa_converted)} m2 converted from {orig_use} to {new_use}')
+    return gfa_converted, buildings_converted, typology_df
