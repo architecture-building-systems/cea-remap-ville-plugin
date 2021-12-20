@@ -13,7 +13,7 @@ import cea.config
 import cea.inputlocator
 import cea.utilities.dbf
 import cea.datamanagement.archetypes_mapper
-from remap_ville_plugin.create_technology_database import update_indoor_comfort, copy_file, copy_assemblies_folder, copy_use_types
+from remap_ville_plugin.create_technology_database import update_indoor_comfort
 
 __author__ = "Daren Thomas"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -55,14 +55,14 @@ def main(config):
     print('\n modifying typology in...', locator.get_building_typology())
     typology = cea.utilities.dbf.dbf_to_dataframe(locator.get_building_typology())
 
-    construction = 'NEP' # FIXME: hard-coded since 'NEP' is always applied
+    construction = 'NEP'  # FIXME: hard-coded since 'NEP' is always applied
     for index, row in typology.iterrows():
         building = row.Name
         old_standard = row.STANDARD
         use_type = row["1ST_USE"]
         new_standard = do_mapping(mapping, old_standard, district_archetype, use_type, year, construction)
         # print(f"Updating {building}, {old_standard} => {new_standard}")
-        typology.loc[index, "STANDARD"] = new_standard # FIXME: investigate Key error!
+        typology.loc[index, "STANDARD"] = new_standard  # FIXME: investigate Key error!
 
     cea.utilities.dbf.dataframe_to_dbf(typology, locator.get_building_typology())
 
@@ -83,7 +83,8 @@ def do_mapping(mapping, old_standard, district_archetype, use_type, year, constr
     try:
         new_standard = mapping[(old_standard, district_archetype, use_type, year, construction)]
     except KeyError:
-        print("Archetype not specificed in the mapping table (mapping_CONSTRUCTION_STANDARD.xlsx)", (old_standard, district_archetype, use_type, year, construction))
+        print("Archetype not specified in the mapping table (mapping_CONSTRUCTION_STANDARD.xlsx)",
+              (old_standard, district_archetype, use_type, year, construction))
         new_standard = old_standard
     return new_standard
 
