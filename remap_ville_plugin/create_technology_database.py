@@ -78,6 +78,7 @@ def copy_file(src, dst):
 
 
 def update_indoor_comfort(RF_scenario, locator):
+    print(f'updating INDOOR_COMFORT in USE_TYPE_PROPERTIES.xlsx in {locator.get_database_use_types_properties()}')
     # call excel application
     o = win32com.client.Dispatch("Excel.Application")
     o.Visible = False
@@ -89,12 +90,12 @@ def update_indoor_comfort(RF_scenario, locator):
     # modify USE_TYPE_PROPERTIES
     path_orig = locator.get_database_use_types_properties()
     wb = o.Workbooks.Open(path_orig)
-    print([sheet.Name for sheet in wb.Sheets])
+    # print([sheet.Name for sheet in wb.Sheets])
     # delete INDOOR_COMFORT
     for sheet in wb.Worksheets:
         if sheet.Name == 'INDOOR_COMFORT':
             sheet.Delete()
-    print([sheet.Name for sheet in wb.Sheets])
+    # print([sheet.Name for sheet in wb.Sheets])
     ws_comfort = wb.Worksheets.Add()
     ws_comfort.Name = 'INDOOR_COMFORT'
     ws_summary.Range("A1:AF100").Copy(ws_comfort.Range("A1:AF100"))
