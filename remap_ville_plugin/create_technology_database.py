@@ -96,7 +96,7 @@ def copy_file(src, dst):
 
 
 def update_indoor_comfort(RF_scenario, locator):
-    print('Updating INDOOR_COMFORT according to scenario')
+    print(f'updating INDOOR_COMFORT in USE_TYPE_PROPERTIES.xlsx in {locator.get_database_use_types_properties()}')
     # call excel application
     o = win32com.client.Dispatch("Excel.Application")
     o.Visible = False

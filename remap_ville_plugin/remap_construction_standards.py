@@ -1,6 +1,6 @@
 """
 Map the field ``typology.df:STANDARD`` to the new value, based on:
-- construction (BAU / NEP)
+- construction (S/UC/TB/F)
 - year (2040 / 2060)
 - district-archetype (URB, SURB, RRL)
 
@@ -13,7 +13,7 @@ import cea.config
 import cea.inputlocator
 import cea.utilities.dbf
 import cea.datamanagement.archetypes_mapper
-from remap_ville_plugin.create_technology_database import update_indoor_comfort, copy_file, copy_assemblies_folder, copy_use_types
+from remap_ville_plugin.create_technology_database import update_indoor_comfort
 
 __author__ = "Daren Thomas"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -51,21 +51,20 @@ def main(config):
     RF_scenario = f'RF_{construction}'
     update_indoor_comfort(RF_scenario, locator)
 
-    mapping = read_mapping()
+    # update construction standards in typology.dbf
     print('\n modifying typology in...', locator.get_building_typology())
+    mapping_dict = read_mapping(construction)
     typology = cea.utilities.dbf.dbf_to_dataframe(locator.get_building_typology())
-
-    construction = 'NEP' # FIXME: hard-coded since 'NEP' is always applied
     for index, row in typology.iterrows():
         building = row.Name
         old_standard = row.STANDARD
         use_type = row["1ST_USE"]
-        new_standard = do_mapping(mapping, old_standard, district_archetype, use_type, year, construction)
+        new_standard = do_mapping(mapping_dict, old_standard, district_archetype, use_type, year, construction)
         # print(f"Updating {building}, {old_standard} => {new_standard}")
-        typology.loc[index, "STANDARD"] = new_standard # FIXME: investigate Key error!
-
+        typology.loc[index, "STANDARD"] = new_standard
     cea.utilities.dbf.dataframe_to_dbf(typology, locator.get_building_typology())
 
+    # update building properties (architecture, air-conditioning, indoor-comfort, supply systems)
     buildings = locator.get_zone_building_names()
     cea.datamanagement.archetypes_mapper.archetypes_mapper(
         locator=locator,
@@ -83,27 +82,26 @@ def do_mapping(mapping, old_standard, district_archetype, use_type, year, constr
     try:
         new_standard = mapping[(old_standard, district_archetype, use_type, year, construction)]
     except KeyError:
-        print("Archetype not specificed in the mapping table (mapping_CONSTRUCTION_STANDARD.xlsx)", (old_standard, district_archetype, use_type, year, construction))
+        print("Archetype not specified in the mapping table (mapping_CONSTRUCTION_STANDARD.xlsx)",
+              (old_standard, district_archetype, use_type, year, construction))
         new_standard = old_standard
     return new_standard
 
 
-def read_mapping():
+def read_mapping(construction):
     """
     Read construction standards according to district, use_type, year, retrofit scenarios
-    TODO: at the moment, all retrofit scenarios have the same construction standard
     :return:
     """
     mapping_df = pd.read_excel(os.path.join(os.path.dirname(__file__), "mapping_CONSTRUCTION_STANDARD.xlsx"))
-    mapping = {}
+    mapping_dict = {}
     for _, row in mapping_df.iterrows():
         status_quo = row.STATUS_QUO
         district = row.DISTRICT
         use_type = row.USE_TYPE
         year = str(row.YEAR)
-        mapping[(status_quo, district, use_type, year, "BAU")] = row.BAU
-        mapping[(status_quo, district, use_type, year, "NEP")] = row.NEP
-    return mapping
+        mapping_dict[(status_quo, district, use_type, year, construction)] = row[str(construction)]
+    return mapping_dict
 
 
 if __name__ == "__main__":
