@@ -13,7 +13,7 @@ import cea.config
 import cea.inputlocator
 import cea.utilities.dbf
 import cea.datamanagement.archetypes_mapper
-from remap_ville_plugin.create_technology_database import update_indoor_comfort
+from remap_ville_plugin.create_technology_database import update_indoor_comfort, copy_file
 
 __author__ = "Daren Thomas"
 __copyright__ = "Copyright 2021, Architecture and Building Systems - ETH Zurich"
@@ -48,8 +48,14 @@ def main(config):
     # # FIXME: END OF HACK
 
     # update INDOOR_COMFORT
+    print('updating INDOOR_COMFORT')
     RF_scenario = f'RF_{construction}'
     update_indoor_comfort(RF_scenario, locator)
+    # update CONSTRUCTION_STANDARD
+    print('updating CONSTRUCTION_STANDARD')
+    database_root = os.path.join(os.path.dirname(__file__), "CH_ReMaP")
+    copy_file(os.path.join(database_root, "archetypes", "CONSTRUCTION_STANDARD_SUMMARY.xlsx"),
+              locator.get_database_construction_standards())
 
     # update construction standards in typology.dbf
     print('\n modifying typology in...', locator.get_building_typology())
